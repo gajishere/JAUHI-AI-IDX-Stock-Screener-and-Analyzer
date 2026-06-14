@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/anthropic/:path*",
+      "destination": "https://api.anthropic.com/:path*"
+    },
+    {
+      "source": "/yf/:path*",
+      "destination": "https://query1.finance.yahoo.com/:path*"
+    }
+  ]
+}
