@@ -1,35 +1,22 @@
-# React + Vite
+📈 AI IDX Stock Analyst
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An advanced, AI-driven web application designed to act as a Senior Equity Analyst and Professional Day Trader for the Indonesian Stock Exchange (IDX / BEI). Powered by Next.js and the Anthropic Claude Vision API, this tool automates complex stock screening, interprets market momentum, and decodes broker activity from user-uploaded screenshots.
+✨ Key Features
 
-Currently, two official plugins are available:
+    Vision-Powered Broker Intelligence: Upload screenshots of Broker Summaries or Mid-Day Foreign Flow. The AI utilizes OCR and LLM reasoning to extract data, profile broker behavior (Smart Money vs. Retail), and analyze net flows.
+    Pack Hunting Detection: Advanced analytical logic to detect coordinated retail movements, identifying market traps like "The Wolf Pack" (gang sell vs. solo buy) or "The Decoy Hunt" (gang buy vs. solo sell).
+    Dual Analysis Workflows:
+        Closing Analysis: End-of-day evaluation combining market data and broker summaries to generate highly confident trading plans for the next session.
+        Mid-Day Analysis: Fast-paced momentum screening based on Session 1 foreign activity to capture Session 2 intraday opportunities.
+    Strict Market Filters: Built-in auto-exclusion for low-velocity/stagnant stocks, and strict parameters for heavy blue-chip or banking sectors unless exceptional momentum is detected.
+    Dynamic Rating System: Provides objective scoring (A+ to C-) across multiple timeframes (Short, Mid, Long-term) based on Foreign Flow, Broker, Technical, Fundamental, and Trend signals.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+🛠️ Tech Stack
 
-## React Compiler
+    Frontend: Next.js, React, TailwindCSS, TypeScript, JavaScript
+    AI / Backend: Anthropic Claude API (Vision-enabled for screenshot extraction)
+    UI/UX: Modern, responsive financial dashboard interface with drag-and-drop file upload capabilities.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+⚠️ Disclaimer
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
-## AI-Enhanced Analysis (Optional)
-
-This application includes optional AI-enhanced analysis using Claude AI. To enable this feature:
-
-1. Get an API key from [Anthropic](https://console.anthropic.com/)
-2. Create a `.env` file in the project root with:
-   ```
-   VITE_CLAUDE_API_KEY=your_api_key_here
-   ```
-3. Restart the development server
-
-The AI analysis will appear in the stock report section when available, providing:
-- Enhanced summary insights
-- Additional considerations and risks
-- Confidence levels with reasoning
-- Specific actionable tips for traders
-
-Note: Without the API key, the application will function normally using rule-based analysis only.
+Not Financial Advice. This application is built for educational and analytical purposes only. Stock market trading involves significant risk. The AI's analysis, including "Pack Hunting" detection, is based on probabilistic reasoning of provided data and does not guarantee future market performance. Always conduct your own research (DYOR) before making any investment decisions.
