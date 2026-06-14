@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import AIStatusPage from './pages/AIStatusPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
@@ -81,6 +82,7 @@ function App() {
           </p>
         </div>
       </footer>
+      <SpeedInsights />
     </div>
   );
 }
