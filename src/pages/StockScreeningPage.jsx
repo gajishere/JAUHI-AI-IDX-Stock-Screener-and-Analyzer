@@ -13,7 +13,10 @@ import { Stepper } from '../components/Stepper';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { ratingFromScore, formatPct, formatRp } from '../lib/analysis';
-import { screeningStage1, screeningStage2 } from '../lib/screeningService';
+import { screeningStage1, screeningStage2, diagnoseStock } from '../lib/screeningService';
+import { CATEGORIES, DEFAULT_CATEGORY, CAP_TIERS, getCategory } from '../lib/screeningCategories';
+import { SECTORS, searchEmiten, findEmiten } from '../lib/universe';
+import { conglomerateGroup } from '../data/conglomerates';
 import { fetchMacro, summarizeMacro } from '../lib/macro';
 import { claudeAIService } from '../lib/claudeAI';
 
@@ -28,6 +31,173 @@ const STEP_LABELS = ['Select Date', 'Run Screening', 'Refine with Brokers'];
 const EQUITY_INDEX = new Set(['ihsg', 'sp500', 'nasdaq', 'nikkei', 'hangseng']);
 const fmtSignedPct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(2)}%`);
 
+// Concise controlling owner for a conglomerate-group ticker (parenthetical
+// detail stripped), or null. Shown on the candidate list for the Conglomerate
+// screen only.
+function conglomerateOwner(ticker) {
+  const grp = conglomerateGroup(ticker);
+  if (!grp) return null;
+  return grp.controller.replace(/\s*\(.*\)\s*$/, '');
+}
+
+
+// Compact "why isn't this on the list?" search — a smaller sibling of the
+// Compact "why isn't this on the list?" search — a smaller sibling of the
+// Stock Analysis search. Runs the active screen's gates against one ticker
+// (via diagnoseStock) and shows a per-criterion pass/fail breakdown.
+function WhyNotRecommended({ date, filters, results }) {
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [active, setActive] = useState(-1);
+  const [loading, setLoading] = useState(false);
+  const [diag, setDiag] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const categoryLabel = getCategory(filters.category).label;
+
+  const onChange = (e) => {
+    const v = e.target.value.toUpperCase();
+    setQuery(v);
+    setActive(-1);
+    if (v.length >= 1) {
+      const m = searchEmiten(v, 6);
+      setSuggestions(m.length === 1 && m[0].code === v ? [] : m);
+    } else {
+      setSuggestions([]);
+    }
+  };
+
+  const run = async (code) => {
+    const known = findEmiten(code);
+    if (!known) return;
+    setQuery(known.code);
+    setSuggestions([]);
+    setActive(-1);
+    setErr(null);
+    setDiag(null);
+    setLoading(true);
+    try {
+      const res = await diagnoseStock(known.code, date, filters, results);
+      setDiag(res);
+    } catch (e) {
+      setErr(e.message || 'Could not diagnose that stock.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown' && suggestions.length) {
+      e.preventDefault();
+      setActive((p) => (p + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp' && suggestions.length) {
+      e.preventDefault();
+      setActive((p) => (p <= 0 ? suggestions.length - 1 : p - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (active >= 0 && suggestions[active]) run(suggestions[active].code);
+      else if (suggestions[0]) run(suggestions[0].code);
+      else if (findEmiten(query)) run(query);
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
+      setActive(-1);
+    }
+  };
+
+  const tone = diag?.recommended ? 'pos' : diag?.qualifies ? 'warn' : 'neg';
+
+  return (
+    <section className="mt-8 border-t border-line pt-6">
+      <h3 className="font-serif text-xl font-medium">Why isn’t this stock recommended?</h3>
+      <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+        Search any IDX ticker to see exactly which {categoryLabel} criteria it passes or fails for this screen.
+      </p>
+
+      <div className="relative mt-4 max-w-md text-left">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted">
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+          </svg>
+        </span>
+        <input
+          type="text"
+          value={query}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder="Check a ticker — e.g. “ASII”"
+          role="combobox"
+          aria-expanded={suggestions.length > 0}
+          aria-autocomplete="list"
+          className="w-full rounded-xl border border-line bg-paper py-2.5 pl-10 pr-4 font-mono text-sm text-ink shadow-sm shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+        />
+        {suggestions.length > 0 && (
+          <ul
+            role="listbox"
+            className="dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-paper py-1.5 shadow-xl shadow-ink/10"
+          >
+            {suggestions.map((s, index) => (
+              <li key={s.code} role="option" aria-selected={index === active}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => run(s.code)}
+                  onMouseEnter={() => setActive(index)}
+                  className={`flex w-full items-baseline gap-3 px-3.5 py-2 text-left transition-colors duration-150 ${
+                    index === active ? 'bg-well' : ''
+                  }`}
+                >
+                  <span className="font-mono text-sm font-semibold">{s.code}</span>
+                  <span className="flex-1 truncate text-xs text-ink-muted">{s.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {loading && (
+        <div className="mt-4 flex items-center gap-3">
+          <span className="jauhi-scan" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="font-mono text-xs text-ink-muted">Checking {query} against the screen…</span>
+        </div>
+      )}
+      {err && !loading && <p className="mt-4 text-sm text-neg">{err}</p>}
+
+      {diag && !loading && (
+        <div className="mt-5 max-w-md rounded-xl border border-line p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-mono text-sm font-semibold text-ink">{diag.ticker}</p>
+            <Pill tone={tone}>
+              {diag.recommended ? 'On the list' : diag.qualifies ? 'Qualifies, not surfaced' : 'Excluded'}
+            </Pill>
+          </div>
+          {diag.name && <p className="mt-0.5 text-xs text-ink-muted">{diag.name}</p>}
+          <p className="mt-3 text-sm leading-relaxed text-ink">{diag.verdict}</p>
+          {diag.checks.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {diag.checks.map((c, i) => (
+                <li key={i} className="flex items-baseline gap-2 text-sm">
+                  <span className={`shrink-0 ${c.ok ? 'text-pos' : 'text-neg'}`} aria-hidden="true">
+                    {c.ok ? '✓' : '✗'}
+                  </span>
+                  <span className="flex-1 text-ink-muted">{c.label}</span>
+                  <span className={`shrink-0 font-mono text-xs tabular-nums ${c.ok ? 'text-ink' : 'text-neg'}`}>
+                    {c.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function StockScreeningPage() {
   // Flow: idle → (date modal) → loading → results → (upload modal) → re-ranked results
@@ -42,8 +212,9 @@ export default function StockScreeningPage() {
   // Filters
   const [numStocks, setNumStocks] = useState(5);
   const [analysisMode, setAnalysisMode] = useState('closing');
-  const [marketCapMin, setMarketCapMin] = useState('');
-  const [marketCapMax, setMarketCapMax] = useState('');
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
+  const [capTier, setCapTier] = useState('every');
+  const [sector, setSector] = useState('');
   const [boardRiskFilter, setBoardRiskFilter] = useState('');
 
   // Run state
@@ -56,6 +227,8 @@ export default function StockScreeningPage() {
   // For closing‑mode workflow
   const [awaitingBrokerUpload, setAwaitingBrokerUpload] = useState(false);
   const [initialScreenings, setInitialScreenings] = useState([]);
+  // AI usage tracking
+  const [aiUsed, setAiUsed] = useState(false);
 
   // Framework JAUHI AI — real macro context + AI top-down narrative
   const [macro, setMacro] = useState(null);
@@ -78,9 +251,13 @@ export default function StockScreeningPage() {
   const [rerankSuccess, setRerankSuccess] = useState(false);
 
   const hasResults = screenings.length > 0;
-  const activeFilterCount =
+  const activeCategory = getCategory(category);
+  // Strategy now lives inline (always visible), so the "More filters" badge
+  // counts only the secondary settings tucked inside the panel.
+  const moreFiltersCount =
     (analysisMode !== 'closing' ? 1 : 0) +
-    (marketCapMin.trim() || marketCapMax.trim() ? 1 : 0) +
+    (capTier !== 'every' ? 1 : 0) +
+    (sector ? 1 : 0) +
     (boardRiskFilter ? 1 : 0);
 
   // Stepper progress: date → screening → refine
@@ -140,10 +317,14 @@ export default function StockScreeningPage() {
       // Stage 1: scan the live IDX universe + score (JAUHI enforced in code).
       setError('Scanning the IDX universe and applying JAUHI screening...');
       const stage1Result = await screeningStage1(date, numStocks, {
-        capMin: marketCapMin.trim() ? Number(marketCapMin) : null,
-        capMax: marketCapMax.trim() ? Number(marketCapMax) : null,
+        category,
+        capTier,
+        sector,
         boardLevel: boardRiskFilter || '',
       });
+
+      // Track whether AI was used in Stage 1
+      setAiUsed(!!stage1Result.aiReview);
 
       if (!stage1Result || stage1Result.candidates.length === 0) {
         setError('No candidates passed JAUHI restrictions. Try a different date or adjust filters.');
@@ -155,6 +336,7 @@ export default function StockScreeningPage() {
       if (analysisMode === 'closing') {
         // Store Stage 1 results for later Stage 2 processing
         setInitialScreenings(stage1Result.candidates);
+        setAiUsed(!!stage1Result.aiReview);
         setAwaitingBrokerUpload(true);
         setLoading(false);
         setError(null);
@@ -346,6 +528,7 @@ export default function StockScreeningPage() {
     setError(null);
     setAwaitingBrokerUpload(false);
     setInitialScreenings([]);
+    setAiUsed(false);
     setMacro(null);
     setFramework(null);
     setFrameworkLoading(false);
@@ -493,130 +676,169 @@ export default function StockScreeningPage() {
                 Find today's candidates
               </h3>
               <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
-                The desk ranks the most-traded IDX names on momentum, trend, flow, and fundamentals, then
-                hands you the top {numStocks} to refine with broker summaries.
+                Scanning the IDX universe for the <span className="font-medium text-ink">{activeCategory.label}</span> strategy,
+                then handing you the top {numStocks} to refine with broker summaries.
               </p>
+              {/* Configure, then run: strategy is the one decision most users
+                  change, so it stays inline; the rest tucks behind "More
+                  filters". The CTA sits below as the visual terminus. */}
+              <div className="mx-auto mt-8 max-w-sm space-y-3 text-left">
+                <div className="space-y-1.5">
+                  <FieldLabel htmlFor="category-filter">Strategy</FieldLabel>
+                  <select
+                    id="category-filter"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                        {c.id === DEFAULT_CATEGORY ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-relaxed text-ink-muted">
+                    {activeCategory.blurb}
+                    {activeCategory.fundamentals ? ' Deeper fundamental scan — takes a little longer.' : ''}
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen((v) => !v)}
+                    aria-expanded={filtersOpen}
+                    className="inline-flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
+                    </svg>
+                    More filters
+                    {moreFiltersCount > 0 && (
+                      <span className="rounded-full bg-brand-tint px-1.5 text-xs font-semibold text-brand">
+                        {moreFiltersCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {filtersOpen && (
+                    <>
+                      {/* click-away */}
+                      <div className="fixed inset-0 z-dropdown" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
+                      <div className="dropdown-enter absolute left-0 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-line bg-paper p-5 text-left shadow-xl shadow-ink/10">
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <FieldLabel>Stocks to surface</FieldLabel>
+                              <div className="inline-flex rounded-lg border border-line p-1">
+                                {COUNT_OPTIONS.map((n) => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => setNumStocks(n)}
+                                    className={`rounded-md px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
+                                      numStocks === n ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                    } hover:scale-[1.02] active:scale-[0.95]`}
+                                  >
+                                    {n}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <FieldLabel>Analysis mode</FieldLabel>
+                              <div className="inline-flex rounded-lg border border-line p-1">
+                                {[
+                                  { value: 'closing', label: 'EOD close' },
+                                  { value: 'midday', label: 'Midday' },
+                                ].map((m) => (
+                                  <button
+                                    key={m.value}
+                                    type="button"
+                                    onClick={() => setAnalysisMode(m.value)}
+                                    className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
+                                      analysisMode === m.value ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                    } hover:scale-[1.02] active:scale-[0.95]`}
+                                  >
+                                    {m.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <FieldLabel>Market cap</FieldLabel>
+                            <div className="flex flex-wrap gap-1 rounded-lg border border-line p-1">
+                              {CAP_TIERS.map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() => setCapTier(t.id)}
+                                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                    capTier === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                  } hover:scale-[1.02] active:scale-[0.95]`}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <FieldLabel htmlFor="sector-filter">Sector</FieldLabel>
+                              <select
+                                id="sector-filter"
+                                value={sector}
+                                onChange={(e) => setSector(e.target.value)}
+                                className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                              >
+                                <option value="">All sectors</option>
+                                {SECTORS.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <FieldLabel htmlFor="board-risk-filter">Listing board</FieldLabel>
+                              <select
+                                id="board-risk-filter"
+                                value={boardRiskFilter}
+                                onChange={(e) => setBoardRiskFilter(e.target.value)}
+                                title="Optional — restricts the scan to a single IDX listing board."
+                                className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                              >
+                                <option value="">Any board</option>
+                                <option value="high">Special Monitoring</option>
+                                <option value="elevated">Acceleration</option>
+                                <option value="moderate">Development / New Economy</option>
+                                <option value="normal">Main board</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setDateModalOpen(true)}
-                className="mt-10 inline-flex items-center gap-2.5 rounded-xl bg-brand px-8 py-4 text-base font-medium text-white shadow-lg shadow-brand/20 transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:shadow-xl hover:shadow-brand/25 hover:scale-[1.02] active:scale-[0.95]"
+                className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-brand px-8 py-4 text-base font-medium text-white shadow-lg shadow-brand/20 transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:shadow-xl hover:shadow-brand/25 hover:scale-[1.02] active:scale-[0.95]"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
                 </svg>
                 Run Screening
               </button>
-
-              <div className="relative shrink-0 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setFiltersOpen((v) => !v)}
-                  aria-expanded={filtersOpen}
-                  className="inline-flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
-                  </svg>
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <span className="rounded-full bg-brand-tint px-1.5 text-xs font-semibold text-brand">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-
-                {filtersOpen && (
-                  <>
-                    {/* click-away */}
-                    <div className="fixed inset-0 z-dropdown" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                    <div className="dropdown-enter absolute left-1/2 z-sticky mt-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-line bg-paper p-5 shadow-xl shadow-ink/10">
-                      <div className="space-y-5">
-                        <div className="space-y-2">
-                          <FieldLabel>Stocks to surface</FieldLabel>
-                          <div className="inline-flex rounded-lg border border-line p-1">
-                            {COUNT_OPTIONS.map((n) => (
-                              <button
-                                key={n}
-                                type="button"
-                                onClick={() => setNumStocks(n)}
-                                className={`rounded-md px-3 py-1 text-sm font-medium tabular-nums transition-colors ${
-                                  numStocks === n ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
-                                } hover:scale-[1.02] active:scale-[0.95]`}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <FieldLabel>Analysis mode</FieldLabel>
-                          <div className="inline-flex rounded-lg border border-line p-1">
-                            {[
-                              { value: 'closing', label: 'EOD close' },
-                              { value: 'midday', label: 'Midday' },
-                            ].map((m) => (
-                              <button
-                                key={m.value}
-                                type="button"
-                                onClick={() => setAnalysisMode(m.value)}
-                                className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                                  analysisMode === m.value ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
-                                } hover:scale-[1.02] active:scale-[0.95]`}
-                              >
-                                {m.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <FieldLabel>Market cap (Rp)</FieldLabel>
-                          <div className="grid grid-cols-2 gap-3">
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="numeric"
-                              value={marketCapMin}
-                              onChange={(e) => setMarketCapMin(e.target.value)}
-                              placeholder="Min"
-                              className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm font-mono tabular-nums text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              inputMode="numeric"
-                              value={marketCapMax}
-                              onChange={(e) => setMarketCapMax(e.target.value)}
-                              placeholder="Max"
-                              className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm font-mono tabular-nums text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <FieldLabel htmlFor="board-risk-filter">Listing board</FieldLabel>
-                          <select
-                            id="board-risk-filter"
-                            value={boardRiskFilter}
-                            onChange={(e) => setBoardRiskFilter(e.target.value)}
-                            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
-                          >
-                            <option value="">Liquid names (default)</option>
-                            <option value="high">Special Monitoring</option>
-                            <option value="elevated">Acceleration</option>
-                            <option value="moderate">Development / New Economy</option>
-                            <option value="normal">Main board</option>
-                          </select>
-                          <p className="text-xs text-ink-muted">
-                            Choosing a board screens the wider universe for that board instead of the liquid set.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    </>
-                  )}
-                </div>
 
                 {savedScreenings.length > 0 && (
                   <div className="mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
@@ -657,17 +879,36 @@ export default function StockScreeningPage() {
                   </header>
 
                   <ul className="mt-6 divide-y divide-line">
-                    {initialScreenings.map((s, i) => (
+                    {initialScreenings.map((s, i) => {
+                      const owner = category === 'conglomerate' ? conglomerateOwner(s.ticker) : null;
+                      return (
                       <li key={s.ticker} className="flex items-baseline gap-3 py-2.5">
                         <span className="w-5 shrink-0 font-mono text-sm tabular-nums text-ink-muted">{i + 1}</span>
                         <span className="font-mono text-sm font-semibold text-ink">{s.ticker}</span>
-                        <span className="flex-1 truncate text-xs text-ink-muted">
-                          {s.name}
-                          {s.capTier ? ` · ${s.capTier}` : ''}
+                        <span className="flex-1 min-w-0 text-xs text-ink-muted">
+                          <span className="block truncate">
+                            {s.name}
+                            {s.capTier ? ` · ${s.capTier}` : ''}
+                          </span>
+                          {owner && (
+                            <span className="mt-1 block" title={`Controlling owner — ${owner}`}>
+                              <Pill tone="muted">{owner}</Pill>
+                            </span>
+                          )}
                         </span>
-                        <span className="font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
+                        {s.composite != null && (
+                          <span
+                            className="font-mono text-sm tabular-nums text-ink-muted"
+                            title="Initial ranking score"
+                          >
+                            {s.composite.toFixed(1)}
+                          </span>
+                        )}
+                        {s.overallRating && <RatingFigure rating={s.overallRating} className="text-sm" />}
+                        <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
 
                   <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-5">
@@ -681,6 +922,12 @@ export default function StockScreeningPage() {
                     </QuietButton>
                   </div>
 
+                  <WhyNotRecommended
+                    date={asOfDate}
+                    filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
+                    results={initialScreenings}
+                  />
+
                   {frameworkSection}
                 </article>
               )}
@@ -691,7 +938,7 @@ export default function StockScreeningPage() {
                   <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
                     <div>
                       <p className="font-mono text-xs text-ink-muted">
-                        Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}
+                        Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}{aiUsed && ' · AI-enhanced'}
                       </p>
                       <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">
                         Top {screenings.length} candidate{screenings.length === 1 ? '' : 's'}
@@ -699,11 +946,12 @@ export default function StockScreeningPage() {
                       <p className="mt-2 text-sm text-ink-muted">
                         {reranked
                           ? 'Re-ranked with broker summaries — weighted toward near-term flow.'
-                          : 'Ranked by composite score (short 35% · mid 35% · long 30%).'}
+                          : `${activeCategory.label} — ${activeCategory.blurb}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       {reranked && <Pill tone="brand">Refined</Pill>}
+                      {aiUsed && <Pill tone="pos">AI-enhanced</Pill>}
                       <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
                     </div>
                   </header>
@@ -829,6 +1077,12 @@ export default function StockScreeningPage() {
                     </p>
                   )}
 
+                  <WhyNotRecommended
+                    date={asOfDate}
+                    filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
+                    results={screenings}
+                  />
+
                   {frameworkSection}
                 </article>
               )}
@@ -903,7 +1157,7 @@ export default function StockScreeningPage() {
             <div>
               <p className="font-mono text-xs text-ink-muted">
                 Closing screen{asOfDate ? ` · as of ${asOfDate}` : ''} · {initialScreenings.length} candidate
-                {initialScreenings.length === 1 ? '' : 's'}
+                {initialScreenings.length === 1 ? '' : 's'}{aiUsed && ' · AI-enhanced'}
               </p>
               <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">Candidates ready</h2>
               <p className="mt-2 max-w-prose text-sm text-ink-muted">
@@ -915,17 +1169,36 @@ export default function StockScreeningPage() {
           </header>
 
           <ul className="mt-6 divide-y divide-line">
-            {initialScreenings.map((s, i) => (
+            {initialScreenings.map((s, i) => {
+              const owner = category === 'conglomerate' ? conglomerateOwner(s.ticker) : null;
+              return (
               <li key={s.ticker} className="flex items-baseline gap-3 py-2.5">
                 <span className="w-5 shrink-0 font-mono text-sm tabular-nums text-ink-muted">{i + 1}</span>
                 <span className="font-mono text-sm font-semibold text-ink">{s.ticker}</span>
-                <span className="flex-1 truncate text-xs text-ink-muted">
-                  {s.name}
-                  {s.capTier ? ` · ${s.capTier}` : ''}
+                <span className="flex-1 min-w-0 text-xs text-ink-muted">
+                  <span className="block truncate">
+                    {s.name}
+                    {s.capTier ? ` · ${s.capTier}` : ''}
+                  </span>
+                  {owner && (
+                    <span className="mt-1 block" title={`Controlling owner — ${owner}`}>
+                      <Pill tone="muted">{owner}</Pill>
+                    </span>
+                  )}
                 </span>
-                <span className="font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
+                {s.composite != null && (
+                  <span
+                    className="font-mono text-sm tabular-nums text-ink-muted"
+                    title="Initial ranking score"
+                  >
+                    {s.composite.toFixed(1)}
+                  </span>
+                )}
+                {s.overallRating && <RatingFigure rating={s.overallRating} className="text-sm" />}
+                <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
               </li>
-            ))}
+              );
+            })}
           </ul>
 
           <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-5">
@@ -939,6 +1212,12 @@ export default function StockScreeningPage() {
             </QuietButton>
           </div>
 
+          <WhyNotRecommended
+            date={asOfDate}
+            filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
+            results={initialScreenings}
+          />
+
           {frameworkSection}
 
         </article>
@@ -948,7 +1227,7 @@ export default function StockScreeningPage() {
             <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
               <div>
                 <p className="font-mono text-xs text-ink-muted">
-                  Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}
+                  Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}{aiUsed && ' · AI-enhanced'}
                 </p>
                 <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">
                   Top {screenings.length} candidate{screenings.length === 1 ? '' : 's'}
@@ -961,6 +1240,7 @@ export default function StockScreeningPage() {
               </div>
               <div className="flex items-center gap-3">
                 {reranked && <Pill tone="brand">Refined</Pill>}
+                {aiUsed && <Pill tone="pos">AI-enhanced</Pill>}
                 <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
               </div>
             </header>
@@ -1085,6 +1365,12 @@ export default function StockScreeningPage() {
                 Saved as "{savedAs}" — it will appear under saved screenings on the start screen.
               </p>
             )}
+
+            <WhyNotRecommended
+              date={asOfDate}
+              filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
+              results={screenings}
+            />
 
             {frameworkSection}
           </article>

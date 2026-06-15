@@ -2,10 +2,11 @@
 // Stage 1: AI selects candidates that pass JAUHI restrictions
 // Stage 2: AI analyzes broker screenshots, detects pack hunting, applies penalties
 
-import { fetchSymbolChart } from './marketData.js';
-import { buildScreeningScore } from './analysis.js';
-import { findEmiten } from './universe.js';
+import { fetchSymbolChart, fetchFundamentals } from './marketData.js';
+import { buildScreeningScore, formatRpCompact, formatPct } from './analysis.js';
+import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
+import { getCategory, matchesCategory, capTierBounds } from './screeningCategories.js';
 import { finishAIActivity, setAIConfigured, startAIActivity } from './aiSession.js';
 
 // Bounded concurrency for the Tier-2 deep-enrich (each candidate = 1 chart +
@@ -40,6 +41,10 @@ const API_KEY = getApiKey();
 const API_URL = '/anthropic/v1/messages'; // Proxied via vite.config.js
 const MODEL = 'claude-haiku-4-5-20251001'; // Using Haiku for efficiency
 const EVIDENCE_NOTE = 'This is an evidence and rationale summary generated from app inputs and model outputs, not hidden chain-of-thought.';
+
+// Helper functions for formatting (matching those in screeningCategories.js)
+const num = (v, d = 1) => (v == null ? 'n/a' : v.toFixed(d));
+const xVal = (v, d = 1) => (v == null ? 'n/a' : `${v.toFixed(d)}x`);
 
 function compactText(text, max = 1200) {
   if (!text) return '';
@@ -90,6 +95,143 @@ const extractJsonFromResponse = (text) => {
     return null;
   }
 };
+
+// AI judgment layer for Stage 1 - reviews matched candidates and provides explanations
+// Keeps tickers real (never invents), only reorders/drops/explains real candidates
+async function aiJudgeCategory(matchedCandidates, category, date) {
+  if (!isConfigured()) return null;
+
+  try {
+    // Prepare candidate data for Claude
+    const candidateLines = matchedCandidates.map((c, index) => {
+      const f = c.fundamentals || {};
+      const s = c.signals || {};
+      return `${index + 1}. ${c.ticker} - ${c.name || 'N/A'}:
+        Sector: ${c.sector || 'N/A'}
+        Market Cap: ${f.marketCap != null ? formatRpCompact(f.marketCap) : 'N/A'}
+        PER: ${f.per != null ? xVal(f.per) : 'N/A'}
+        PBV: ${f.pbv != null ? xVal(f.pbv, 2) : 'N/A'}
+        ROE: ${f.roe != null ? formatPct(f.roe) : 'N/A'}
+        Dividend Yield: ${f.dividendYield != null ? formatPct(f.dividendYield) : 'N/A'}
+        Net Profit Growth: ${f.netProfitGrowth != null ? formatPct(f.netProfitGrowth) : 'N/A'}
+        Revenue Growth: ${f.revenueGrowth != null ? formatPct(f.revenueGrowth) : 'N/A'}
+        DER: ${f.debtToEquity != null ? xVal(f.debtToEquity, 2) : 'N/A'}
+        RSI(14): ${s.rsi14 != null ? num(s.rsi14, 0) : 'N/A'}
+        Volume Ratio: ${s.volumeRatio != null ? num(s.volumeRatio, 2) : 'N/A'}×
+        Golden Trend (MA50 > MA200): ${s.goldenTrend ? 'Yes' : 'No'}
+        Beta vs IHSG: ${c.beta != null ? xVal(c.beta, 2) : 'N/A'}
+        Consecutive Dividend Years: ${f.consecutiveDividendYears != null ? `${f.consecutiveDividendYears} yr` : 'N/A'}
+        Turnover/Day: ${c.turnover != null ? formatRpCompact(c.turnover) : 'N/A'}
+        Velocity OK: ${c.velocityOk ? 'Yes' : 'No'}`.trim();
+    }).join('\n\n');
+
+    // Build criteria description based on category
+    const criteriaDescriptions = category.criteria({}).map(c => `- ${c.label}`).join('\n');
+
+    const systemPrompt = `
+You are an expert Indonesian stock market analyst reviewing stocks that have passed initial quantitative screening for the "${category.label}" category.
+
+Your task is to review each candidate stock's actual metrics and provide AI judgment on their fit for this category. You must:
+1. Keep/drop/reorder only the real candidates provided - never invent or hallucinate tickers
+2. For each kept candidate, explain the fit in 1-2 sentences
+3. Provide a rank adjustment (positive = move up, negative = move down, 0 = no change)
+4. Return valid JSON in the exact format specified
+
+Category: ${category.label}
+Description: ${category.blurb}
+Criteria to consider:
+${criteriaDescriptions}
+
+For each stock, evaluate how well it embodies the spirit of this category beyond just passing the basic filters.
+
+OUTPUT FORMAT - YOU MUST PROVIDE EXACTLY THIS STRUCTURE:
+{
+  "candidates": [
+    {
+      "ticker": "STRING",
+      "reason": "STRING (1-2 sentence explanation of fit)",
+      "rank_adjustment": NUMBER (integer, e.g., -2, 0, +3)
+    }
+  ],
+  "explanation": "STRING (brief overall explanation of your ranking adjustments)"
+}
+
+Where:
+- ticker: Must match exactly one of the input stock tickers
+- reason: Your explanation of why this stock fits the category (1-2 sentences)
+- rank_adjustment: How many positions to move this stock (-N = move down N spots, +N = move up N spots, 0 = no change)
+- explanation: Summary of your overall approach and observations
+
+Only return the JSON object, no additional text.
+`;
+
+    const userPrompt = `
+SCREENING DATE: ${date}
+CATEGORY: ${category.label}
+
+CANDIDATE STOCKS THAT PASSED INITIAL SCREENING:
+${candidateLines}
+
+Review these real IDX candidates against the ${category.label} category.
+Keep/drop/rerank based on how well they embody the category's spirit.
+For each kept candidate, explain the fit in 1-2 sentences.
+Provide rank adjustments to reorder the list.
+Return ONLY the JSON structure specified in the system prompt.
+`;
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: userPrompt }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.content?.[0]?.text ?? '';
+    const result = extractJsonFromResponse(responseText);
+
+    // Validate the response structure
+    if (result && Array.isArray(result.candidates)) {
+      // Filter to only include candidates that were in our original list
+      const originalTickers = new Set(matchedCandidates.map(c => c.ticker));
+      const validCandidates = result.candidates
+        .filter(c => c.ticker && originalTickers.has(c.ticker))
+        .map(c => ({
+          ticker: c.ticker,
+          reason: c.reason || '',
+          rank_adjustment: typeof c.rank_adjustment === 'number' ? c.rank_adjustment : 0
+        }));
+
+      if (validCandidates.length > 0) {
+        return {
+          candidates: validCandidates,
+          explanation: result.explanation || 'AI review completed'
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('AI review failed:', error);
+    return null;
+  }
+}
 
 // JAUHI velocity filter (SAHAM LAMBAT) — pure check over already-fetched
 // candles. Returns true if the stock is NOT slow (i.e., passes the filter).
@@ -186,20 +328,61 @@ function jauhiVerdict({ name, sector, marketCap, close, chart }) {
   return { skip: false, exception };
 }
 
-// Average daily value traded (Rp) a name must clear to count as a "strong",
-// cleanly-tradable pick. Names below this aren't dropped outright — Stage 1's
-// fallback can still surface them if there aren't enough strong movers — but
-// they rank behind the liquid ones.
-const LIQUIDITY_STRONG = 5e9; // ~Rp5B/day
+// 1-year beta vs the IHSG/JCI (^JKSE): cov(stock, index) / var(index) on daily
+// returns aligned by trading date. `indexCloseByDate` is a Map(date -> close)
+// fetched once per screen. Returns null when the overlap is too thin to trust.
+function computeBeta(stockCandles, indexCloseByDate, lookback = 252) {
+  if (!stockCandles || !indexCloseByDate) return null;
+  const pairs = [];
+  for (const c of stockCandles) {
+    const idx = indexCloseByDate.get(c.date);
+    if (idx != null && c.close != null) pairs.push([c.close, idx]);
+  }
+  const recent = pairs.slice(-(lookback + 1));
+  if (recent.length < 30) return null;
+  const sr = [];
+  const ir = [];
+  for (let k = 1; k < recent.length; k++) {
+    const sPrev = recent[k - 1][0];
+    const iPrev = recent[k - 1][1];
+    if (sPrev > 0 && iPrev > 0) {
+      sr.push((recent[k][0] - sPrev) / sPrev);
+      ir.push((recent[k][1] - iPrev) / iPrev);
+    }
+  }
+  if (sr.length < 30) return null;
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const ms = mean(sr);
+  const mi = mean(ir);
+  let cov = 0;
+  let varI = 0;
+  for (let k = 0; k < sr.length; k++) {
+    cov += (sr[k] - ms) * (ir[k] - mi);
+    varI += (ir[k] - mi) ** 2;
+  }
+  return varI > 0 ? cov / varI : null;
+}
 
-// Deep-enrich a shortlisted candidate with REAL market data: one chart fetch
-// drives the screening score, the JAUHI bank/blue-chip checks, and the velocity
-// + liquidity classification. Rather than returning null on a soft miss, it
-// returns a status object so Stage 1 can rank and, if needed, relax:
-//   { data, velocityOk, liquidOk, turnover }  — usable (JAUHI-clean, scored)
-//   { data: null, status }                    — unusable: 'jauhi' (hard skip),
-//                                                'nodata' (no history), 'error'
-async function enrichCandidate(candidate, date, range) {
+// Fetch the IHSG/JCI close-by-date map once for a screen — only categories that
+// score beta need it. Returns null on failure (beta then degrades to null).
+async function fetchIndexCloseByDate(range) {
+  try {
+    const idx = await fetchSymbolChart('^JKSE', range);
+    return new Map((idx.candles ?? []).map((c) => [c.date, c.close]));
+  } catch {
+    return null;
+  }
+}
+
+// Deep-enrich a shortlisted candidate with REAL market data: a chart fetch
+// drives the screening score + technical signals, and — when the category
+// needs them — a fundamentals fetch adds PER/PBV/ROE/ROA/growth/dividend. The
+// JAUHI bank/blue-chip check is applied only when the category opts in (Blue
+// Chip & High Liquidity opts out). Returns a status object so Stage 1 can
+// filter and rank:
+//   { data }                 — usable (scored, with signals + fundamentals)
+//   { data: null, status }   — unusable: 'jauhi' (hard skip), 'nodata', 'error'
+async function enrichCandidate(candidate, date, range, category, ctx = {}) {
   try {
     const chart = await fetchSymbolChart(`${candidate.ticker}.JK`, range);
     // Judge everything AS OF the screening date, not today — otherwise a name
@@ -208,45 +391,67 @@ async function enrichCandidate(candidate, date, range) {
     if (asOfCandles.length < 30) return { data: null, status: 'nodata' }; // score needs ~30
     const datedChart = asOfChart(chart, asOfCandles);
 
-    // Screening is momentum/flow-driven, so we skip the extra fundamentals
-    // round-trip here: it doubles the request load (a reliability risk across a
-    // big shortlist) and the composite renormalizes fine without it.
+    // Fundamentals are fetched only for categories that filter on them
+    // (Value / Growth / Dividend / Blue Chip / Conglomerate), keeping
+    // momentum/penny screens to a single round-trip per name. The Conglomerate
+    // screen additionally pulls multi-year dividend history.
+    let fundamentals = null;
+    if (category.fundamentals) {
+      fundamentals = await fetchFundamentals(candidate.ticker, {
+        dividendHistory: !!category.dividendHistory,
+      });
+    }
+
+    // 1Y beta vs IHSG — only when the category scores it (Conglomerate).
+    const beta = category.beta ? computeBeta(asOfCandles, ctx.indexCloseByDate) : null;
+
     let score;
     try {
       score = buildScreeningScore({
         code: candidate.ticker,
         requestedDate: date,
         chart: datedChart,
-        fundamentals: null,
+        fundamentals,
         emitenInfo: findEmiten(candidate.ticker),
       });
     } catch {
       return { data: null, status: 'nodata' };
     }
 
-    // JAUHI BANK / BLUE CHIP is a HARD exclusion — never relaxed by the fallback.
-    const verdict = jauhiVerdict({
-      name: score.name,
-      sector: candidate.sector,
-      marketCap: score.marketCap,
-      close: score.close,
-      chart: datedChart,
-    });
-    if (verdict.skip) return { data: null, status: 'jauhi' };
+    // JAUHI BANK / BLUE CHIP — applied only when the category opts in.
+    if (category.jauhi) {
+      const verdict = jauhiVerdict({
+        name: score.name,
+        sector: candidate.sector,
+        marketCap: score.marketCap,
+        close: score.close,
+        chart: datedChart,
+      });
+      if (verdict.skip) return { data: null, status: 'jauhi' };
+      candidate = verdict.exception
+        ? { ...candidate, reason: `${candidate.reason} (${verdict.exception})` }
+        : candidate;
+    }
 
-    // Soft signals — used to rank and to relax under starvation, not to drop.
     const velocityOk = passesVelocity(asOfCandles); // SAHAM LAMBAT
     const turnover = score.avgValueTraded20 ?? 0;
-    const liquidOk = turnover >= LIQUIDITY_STRONG;
 
-    const reason = verdict.exception ? `${candidate.reason} (${verdict.exception})` : candidate.reason;
-    return {
-      data: { ...score, sector: candidate.sector ?? null, reason },
-      status: 'ok',
-      velocityOk,
-      liquidOk,
+    // Dividend yield needs price, which fundamentals doesn't carry — derive it
+    // here from trailing dividend-per-share over the as-of close.
+    if (fundamentals && fundamentals.dividendPerShare != null && score.close > 0) {
+      fundamentals = { ...fundamentals, dividendYield: fundamentals.dividendPerShare / score.close };
+    }
+
+    const data = {
+      ...score,
+      sector: candidate.sector ?? null,
+      reason: candidate.reason,
+      fundamentals,
       turnover,
+      velocityOk,
+      beta,
     };
+    return { data, status: 'ok' };
   } catch {
     // Delisted, rate-limited past retries, or a data hiccup — unusable.
     return { data: null, status: 'error' };
@@ -254,26 +459,30 @@ async function enrichCandidate(candidate, date, range) {
 }
 
 // Stage 1: scan the FULL IDX universe on live data, then deep-enrich + score
-// the shortlist, returning the top `count` survivors. No LLM is involved in
-// candidate selection — tickers come from real market data, not model recall.
-//   Tier 1: batch-scan ~all emiten (spark) → JAUHI + velocity pre-filter →
-//           momentum-ranked shortlist (see screeningUniverse.js).
-//   Tier 2: full chart + fundamentals per shortlisted name → precise JAUHI
-//           (velocity + bank/blue-chip) and composite scoring → rank by score.
-// `filters`: { capMin, capMax, boardLevel } from the screening UI.
+// the shortlist, returning the top `count` names that match the chosen
+// strategy category. No LLM is involved in candidate selection — tickers come
+// from real market data, not model recall.
+//   Tier 1: batch-scan ~all emiten (spark) → board/sector/cap pre-filter →
+//           category-ranked shortlist (see screeningUniverse.js).
+//   Tier 2: full chart (+ fundamentals when the category needs them) per
+//           shortlisted name → score + signals → apply the category's hard
+//           filter, then rank by the category's preference.
+// `filters`: { category, capTier, sector, boardLevel } from the screening UI.
 export const screeningStage1 = async (date, count = 5, filters = {}) => {
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new Error('Date must be in YYYY-MM-DD format');
   }
 
   const range = screeningRangeForDate(date);
+  const category = getCategory(filters.category);
 
   try {
-    // Tier 1 — live universe scan.
+    // Tier 1 — live universe scan, ranked per category.
     const { shortlist, universeSize, candidateCount } = await scanUniverse(date, {
       count,
-      capMin: filters.capMin ?? null,
-      capMax: filters.capMax ?? null,
+      category,
+      capTier: filters.capTier ?? 'every',
+      sector: filters.sector ?? '',
       boardLevel: filters.boardLevel ?? '',
       range,
     });
@@ -282,51 +491,204 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       return {
         date,
         candidates: [],
-        marketSummary: `Scanned ${universeSize} IDX names — none passed the JAUHI, velocity, and filter criteria for ${date}.`,
+        marketSummary: `Scanned ${universeSize} IDX names — none matched the ${category.label} filters for ${date}.`,
         raw: null,
       };
     }
 
     // Tier 2 — deep-enrich the shortlist (bounded concurrency, with fetch retry
-    // for rate-limit resilience). Every JAUHI-clean, scored name is usable; we
-    // rank by preference and only relax the soft gates (velocity, liquidity) if
-    // there aren't enough strong picks — so the screen never starves when real
-    // movers exist. JAUHI itself is never relaxed.
+    // for rate-limit resilience), then apply the category's hard filter and
+    // ranking. JAUHI (when the category enforces it) is applied during enrich.
+    // Beta categories need the IHSG series once for the whole shortlist.
+    const ctx = category.beta
+      ? { indexCloseByDate: await fetchIndexCloseByDate(range) }
+      : {};
     const results = await mapLimit(shortlist, ENRICH_CONCURRENCY, (c) =>
-      enrichCandidate(c, date, range)
+      enrichCandidate(c, date, range, category, ctx)
     );
-    const usable = results.filter((r) => r && r.data);
+    const usable = results.filter((r) => r && r.data).map((r) => r.data);
 
-    const byComposite = (a, b) => (b.data.composite ?? 0) - (a.data.composite ?? 0);
-    const byTurnover = (a, b) => b.turnover - a.turnover;
+    const matched = usable.filter((d) => matchesCategory(category, d));
 
-    // Preference tiers: strong (fast + liquid) → liquid-but-calm → fast-but-thin
-    // → the rest (most liquid first). Fill `count` from the top down.
-    const strong = usable.filter((r) => r.velocityOk && r.liquidOk).sort(byComposite);
-    const liquidCalm = usable.filter((r) => !r.velocityOk && r.liquidOk).sort(byComposite);
-    const fastThin = usable.filter((r) => r.velocityOk && !r.liquidOk).sort(byTurnover);
-    const rest = usable.filter((r) => !r.velocityOk && !r.liquidOk).sort(byTurnover);
-    const ordered = [...strong, ...liquidCalm, ...fastThin, ...rest];
+    // Velocity categories (Penny / Momentum) prefer fast tape: order matched
+    // movers ahead of calmer ones, ranking within each band by the category's
+    // own preference. Other categories rank purely by the category preference.
+    let ordered;
+    if (category.velocity) {
+      const fast = matched.filter((d) => d.velocityOk).sort(category.rank);
+      const calm = matched.filter((d) => !d.velocityOk).sort(category.rank);
+      ordered = [...fast, ...calm];
+    } else {
+      ordered = [...matched].sort(category.rank);
+    }
 
-    const finalCandidates = ordered.slice(0, count).map((r, i) => {
-      // Flag picks that only made the list because the strict gates were relaxed,
-      // so the UI/narrative don't present a thin/calm name as a prime mover.
-      if (i < strong.length) return r.data;
-      const note = !r.liquidOk && !r.velocityOk ? 'thin & calm tape' : !r.liquidOk ? 'lighter liquidity' : 'calmer tape';
-      return { ...r.data, reason: `${r.data.reason} · relaxed: ${note}` };
-    });
+    // AI Judgment Layer: Review matched candidates and provide explanations
+    let aiResult = null;
+    if (isConfigured()) {
+      try {
+        aiResult = await aiJudgeCategory(ordered, category, date);
+      } catch (e) {
+        console.warn('AI review failed, using deterministic ranking:', e);
+      }
+    }
+    if (aiResult?.candidates) {
+      // Apply AI ranking adjustments
+      const rankedWithAdjustments = ordered.map((candidate, originalIndex) => {
+        const aiCandidate = aiResult.candidates.find(ai => ai.ticker === candidate.ticker);
+        return {
+          ...candidate,
+          originalIndex, // Store original position for stable sorting
+          aiRankAdjustment: aiCandidate ? aiCandidate.rank_adjustment : 0,
+          aiReason: aiCandidate ? aiCandidate.reason : null
+        };
+      });
+
+      // Sort by original rank, then by AI adjustment (descending so positive adjustments come first)
+      ordered = rankedWithAdjustments
+        .sort((a, b) => {
+          // First sort by original position (lower index = higher original rank)
+          if (a.originalIndex !== b.originalIndex) return a.originalIndex - b.originalIndex;
+
+          // Then sort by AI adjustment (higher adjustment = better rank)
+          return b.aiRankAdjustment - a.aiRankAdjustment;
+        })
+        .map(({ originalIndex, aiRankAdjustment, aiReason, ...rest }) => rest);
+    }
+
+    const finalCandidates = ordered.slice(0, count).map((d) => ({
+      ...d,
+      reason: d.aiReason ? d.aiReason : category.describe(d),
+    }));
 
     return {
       date,
       candidates: finalCandidates,
+      category: category.id,
       // Funnel summary kept on the result (not console) for a clean production log.
-      marketSummary: `Scanned ${universeSize} IDX names → ${candidateCount} movers → ${usable.length} scored → top ${finalCandidates.length} (${strong.length} strong).`,
+      marketSummary: `Scanned ${universeSize} IDX names → ${candidateCount} eligible → ${usable.length} scored → ${matched.length} matched ${category.label} → top ${finalCandidates.length}${aiResult ? ' (AI-reviewed)' : ''}.`,
       raw: null,
+      aiReview: aiResult ? true : false,
     };
   } catch (error) {
     console.error('Error in screeningStage1:', error);
     throw error;
   }
+};
+
+// Diagnose a SINGLE ticker against the active screen: "why isn't this stock on
+// the recommendation list?" Runs the same gates the screen uses — filters
+// (sector/board/cap), JAUHI (when the category enforces it), and the category's
+// per-criterion checks — and returns a structured breakdown. No LLM involved.
+//   { ticker, name, found, recommended, rank?, qualifies, verdict, checks:[{label, ok, detail}], fatal? }
+export const diagnoseStock = async (code, date, filters = {}, recommended = []) => {
+  const ticker = (code || '').trim().toUpperCase();
+  if (!ticker) throw new Error('Enter a ticker to diagnose.');
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('A screening date is required to diagnose a stock.');
+  }
+
+  const category = getCategory(filters.category);
+  const emitenInfo = findEmiten(ticker);
+  if (!emitenInfo) {
+    return { ticker, found: false, recommended: false, qualifies: false, checks: [], verdict: `${ticker} isn't in the IDX listing universe.` };
+  }
+
+  const name = emitenInfo.name;
+  const hit = recommended.find((r) => r.ticker === ticker);
+  const checks = [];
+
+  // Pre-network filter gates (the UI selectors).
+  if (filters.sector) {
+    checks.push({ label: `Sector is ${filters.sector}`, ok: emitenInfo.sector === filters.sector, detail: emitenInfo.sector ?? 'unclassified' });
+  }
+  if (filters.boardLevel) {
+    const lvl = boardRisk(emitenInfo.board)?.level;
+    checks.push({ label: 'Matches the listing-board filter', ok: lvl === filters.boardLevel, detail: emitenInfo.board ?? 'unknown' });
+  }
+
+  const range = screeningRangeForDate(date);
+  let score;
+  let datedChart;
+  let asOfCandles;
+  let fundamentals = null;
+  try {
+    const chart = await fetchSymbolChart(`${ticker}.JK`, range);
+    asOfCandles = chart?.candles?.filter((c) => c.date <= date) ?? [];
+    if (asOfCandles.length < 30) {
+      return { ticker, name, found: true, recommended: !!hit, qualifies: false, checks, verdict: `Not enough trading history on or before ${date} to score ${ticker}.` };
+    }
+    datedChart = asOfChart(chart, asOfCandles);
+    if (category.fundamentals)
+      fundamentals = await fetchFundamentals(ticker, { dividendHistory: !!category.dividendHistory });
+    score = buildScreeningScore({ code: ticker, requestedDate: date, chart: datedChart, fundamentals, emitenInfo });
+  } catch {
+    return { ticker, name, found: true, recommended: !!hit, qualifies: false, checks, verdict: `Could not load market data for ${ticker} — it may be delisted, suspended, or too new.` };
+  }
+
+  const cap = score.marketCap;
+
+  // Cap-tier selector.
+  if (filters.capTier && filters.capTier !== 'every') {
+    const t = capTierBounds(filters.capTier);
+    const ok = cap != null && (t.min == null || cap >= t.min) && (t.max == null || cap < t.max);
+    checks.push({ label: `In the ${t.label} band`, ok, detail: formatRpCompact(cap) });
+  }
+
+  // JAUHI bank / blue-chip (only when the category enforces it).
+  if (category.jauhi) {
+    const verdict = jauhiVerdict({ name: score.name, sector: emitenInfo.sector, marketCap: cap, close: score.close, chart: datedChart });
+    if (verdict.skip) {
+      checks.push({
+        label: `Passes JAUHI (${verdict.rule})`,
+        ok: false,
+        detail: verdict.rule === 'JAUHI BANK' ? 'a bank with no >2× volume breakout' : '≥Rp100T blue chip with no breakout / 52w-high break',
+      });
+    }
+  }
+
+  // Derive dividend yield (needs price) before the category criteria run.
+  if (fundamentals && fundamentals.dividendPerShare != null && score.close > 0) {
+    fundamentals = { ...fundamentals, dividendYield: fundamentals.dividendPerShare / score.close };
+  }
+
+  // 1Y beta vs IHSG — only when the category scores it (Conglomerate).
+  const beta = category.beta
+    ? computeBeta(asOfCandles, await fetchIndexCloseByDate(range))
+    : null;
+
+  const d = {
+    ...score,
+    sector: emitenInfo.sector ?? null,
+    turnover: score.avgValueTraded20 ?? 0,
+    velocityOk: passesVelocity(asOfCandles),
+    fundamentals,
+    beta,
+  };
+
+  // The category's own strategy criteria.
+  for (const c of category.criteria(d)) checks.push(c);
+
+  const qualifies = checks.every((c) => c.ok);
+
+  let verdict;
+  if (hit) {
+    verdict = `${ticker} IS on the list${hit.rank ? ` at #${hit.rank}` : ''}.`;
+  } else if (!qualifies) {
+    const failed = checks.filter((c) => !c.ok);
+    verdict = `${ticker} is excluded by the ${category.label} screen — it fails ${failed.length} of ${checks.length} criteria below.`;
+  } else {
+    // Passed every gate but isn't in the top N — a ranking/shortlist miss.
+    const lowest = recommended.length ? recommended[recommended.length - 1] : null;
+    const lowScore = lowest ? (lowest.composite ?? lowest.activeComposite) : null;
+    verdict =
+      `${ticker} qualifies for ${category.label}, but didn't make the top ${recommended.length || 'N'} — ` +
+      (lowScore != null
+        ? `it ranked behind the surfaced names (its composite ${d.composite.toFixed(1)} vs the cutoff ~${Number(lowScore).toFixed(1)}), `
+        : 'it ranked behind the surfaced names, ') +
+      'or fell outside the deep-scan shortlist. Raise "Stocks to surface" or tighten the filters to pull it in.';
+  }
+
+  return { ticker, name, found: true, recommended: !!hit, rank: hit?.rank ?? null, qualifies, verdict, checks, composite: d.composite, close: score.close };
 };
 
 // Stage 2: Analyze broker screenshots, detect pack hunting, apply penalties

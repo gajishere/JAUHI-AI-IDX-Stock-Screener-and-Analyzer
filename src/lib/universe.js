@@ -35,6 +35,10 @@ export function searchEmiten(query, limit = 8) {
   return scored.slice(0, limit).map((s) => s.e);
 }
 
+// Distinct sectors present in the universe (Yahoo GICS-style), sorted for the
+// screening sector dropdown. Names without a sector are simply excluded here.
+export const SECTORS = [...new Set(emiten.map((e) => e.sector).filter(Boolean))].sort();
+
 // ---------- market-cap classification ----------
 
 export function marketCap(emitenInfo, price) {

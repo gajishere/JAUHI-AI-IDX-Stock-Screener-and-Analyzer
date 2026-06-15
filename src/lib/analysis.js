@@ -482,5 +482,16 @@ export function buildScreeningScore({ code, requestedDate, chart, fundamentals, 
     composite,
     overallRating: ratingFromScore(composite),
     keyDriver: ratings.shortTerm.keyDriver,
+    // Raw technical signals the screening categories filter on directly
+    // (e.g. the Momentum/Swing golden-cross + RSI band + volume check).
+    signals: {
+      rsi14: ind.rsi14,
+      sma50: ind.sma50,
+      sma200: ind.sma200,
+      volumeRatio: ind.volumeRatio,
+      goldenTrend:
+        ind.sma50 != null && ind.sma200 != null &&
+        ind.close > ind.sma50 && ind.sma50 > ind.sma200,
+    },
   };
 }

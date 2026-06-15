@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    port: 5177,
     proxy: {
       // Yahoo Finance has no CORS headers, so market-data requests are proxied
       // through the dev server: /yf/* -> https://query1.finance.yahoo.com/*
