@@ -1,8 +1,8 @@
-// Vercel serverless proxy for the IDX RapidAPI. Mirrors the dev-only /idx Vite
-// proxy (vite.config.js) for production: the browser calls /idx/* with no
-// secret, a vercel.json rewrite maps that to /api/idx/*, and this function
-// attaches the RapidAPI headers from the server-side IDX_RAPIDAPI_KEY env var
-// (set in the Vercel project settings — never shipped to the client).
+// Vercel serverless proxy for the IDX RapidAPI. The browser calls /idx/* with
+// no secret; a vercel.json rewrite maps that to /api/idx?path=/*&<original
+// query>, and this flat function (no dynamic catch-all route) attaches the
+// RapidAPI headers from the server-side IDX_RAPIDAPI_KEY env var (set in the
+// Vercel project settings — never shipped to the client).
 
 import process from 'node:process';
 
@@ -21,10 +21,13 @@ export default async function handler(req, res) {
       .json({ success: false, message: 'IDX_RAPIDAPI_KEY is not configured on the server' });
   }
 
-  // Forward everything after the /idx (or rewritten /api/idx) prefix — path and
-  // query string both — to the upstream host unchanged.
-  const suffix = req.url.replace(/^\/api\/idx/, '').replace(/^\/idx/, '');
-  const target = `https://${IDX_HOST}${suffix}`;
+  const { path, ...rest } = req.query;
+  if (!path) {
+    return res.status(400).json({ success: false, message: 'Missing path query parameter' });
+  }
+
+  const qs = new URLSearchParams(rest).toString();
+  const target = `https://${IDX_HOST}${path}${qs ? `?${qs}` : ''}`;
 
   try {
     const upstream = await fetch(target, {
