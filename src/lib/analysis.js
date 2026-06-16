@@ -1,6 +1,10 @@
 // Analysis engine: turns real OHLCV history + fundamentals into the
-// research-note structure the report pages render. All scores are on a
-// 0–9 scale; ratings derive from the weighted composite per timeframe.
+// research-note structure the report pages render. The scoring engine itself
+// computes on an internal 0.5–9 scale (pillar weights and narrative
+// thresholds below are tuned to it); ratingFromScore() and toScoreTen()
+// convert that internal scale to the 1–10 score shown to users — the same
+// conversion both the Analysis and Screening pages use, so a "7.5" means the
+// same thing everywhere and the letter grade always derives from it.
 import { boardRisk, capTier, marketCap } from './universe.js';
 
 // ---------- formatting ----------
@@ -20,6 +24,18 @@ export function formatRpCompact(value) {
   if (abs >= 1e9) return `Rp ${(value / 1e9).toFixed(1)}B`;
   if (abs >= 1e6) return `Rp ${(value / 1e6).toFixed(1)}M`;
   return formatRp(value);
+}
+
+// Compact magnitude without a currency prefix — for dense tables (lot counts,
+// share counts) where "Rp" would be noise.
+export function formatCompact(value, digits = 1) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(digits)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(digits)}M`;
+  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(digits)}K`;
+  return `${sign}${Math.round(abs).toLocaleString('en-US')}`;
 }
 
 export function formatPct(ratio, digits = 1) {
@@ -76,6 +92,37 @@ function obvDelta(candles, period = 20) {
   return obv;
 }
 
+// Convert bandarmology accdist string to a numeric score component
+function bandarmologyScoreComponent(bandar) {
+  if (!bandar) return 0;
+
+  // Convert accdist reading to a score adjustment
+  const accdist = bandar.accdist?.toLowerCase() || '';
+  let scoreAdjustment = 0;
+
+  // The IDX API returns short codes ("Acc" / "Big Acc" / "Dist"), not the full
+  // words — match on "acc"/"dist" the same way accTone() does, not "accum"
+  // (which "Acc" can never contain and silently never matched).
+  if (accdist.includes('acc')) {
+    // Accumulation is positive
+    scoreAdjustment = 1.5;
+  } else if (accdist.includes('dist')) {
+    // Distribution is negative
+    scoreAdjustment = -1.5;
+  }
+
+  // Modify based on buyer/seller ratio if available
+  if (bandar.totalBuyers !== null && bandar.totalSellers !== null &&
+      (bandar.totalBuyers + bandar.totalSellers) > 0) {
+    const ratio = bandar.totalBuyers / (bandar.totalBuyers + bandar.totalSellers);
+    // Ratio of 0.5 is neutral, >0.5 is bullish, <0.5 is bearish
+    scoreAdjustment += (ratio - 0.5) * 2; // Scale to roughly -1 to +1
+  }
+
+  // Clamp the adjustment to reasonable bounds
+  return Math.max(-2, Math.min(2, scoreAdjustment));
+}
+
 function returnOver(closes, sessions) {
   if (closes.length <= sessions) return null;
   const past = closes[closes.length - 1 - sessions];
@@ -90,7 +137,18 @@ function autoRejectLimit(price) {
   return 0.2;
 }
 
-const clampScore = (s) => Math.max(0.5, Math.min(9, s));
+const SCORE_FLOOR = 0.5;
+const SCORE_CEIL = 9;
+const clampScore = (s) => Math.max(SCORE_FLOOR, Math.min(SCORE_CEIL, s));
+
+// Converts any raw score onto the public 1–10 scale. Defaults to the
+// engine's internal 0.5–9 range; pass { rawMin: 0, rawMax: 100 } for an
+// AI judge's 0–100 score so it lands on the exact same 1–10 scale.
+export function toScoreTen(raw, rawMin = SCORE_FLOOR, rawMax = SCORE_CEIL) {
+  if (raw == null || !Number.isFinite(raw)) return null;
+  const ratio = (raw - rawMin) / (rawMax - rawMin);
+  return Math.max(1, Math.min(10, 1 + ratio * 9));
+}
 
 export function computeIndicators(chart, asOfDate) {
   // Use only sessions on or before the analysis date.
@@ -187,7 +245,7 @@ function trendScore(ind) {
   return clampScore(s);
 }
 
-function flowScore(ind) {
+function flowScore(ind, bandarmology = null) {
   let s = 4.5;
   if (ind.volumeRatio > 1.15) s += 1;
   else if (ind.volumeRatio < 0.85) s -= 1;
@@ -195,6 +253,10 @@ function flowScore(ind) {
   if (ind.avgValueTraded20 > 5e10) s += 0.75; // > Rp 50B/day is institutionally liquid
   else if (ind.avgValueTraded20 < 1e9) s -= 0.75;
   if (ind.dayChange > 0 && ind.volumeRatio > 1) s += 0.5;
+
+  // Add bandarmology component if available
+  s += bandarmologyScoreComponent(bandarmology);
+
   return clampScore(s);
 }
 
@@ -240,13 +302,16 @@ function fundamentalScore(f, context = {}) {
 
 // ---------- composite ratings ----------
 
-export function ratingFromScore(score) {
-  if (score >= 8.25) return 'A+';
-  if (score >= 7.25) return 'A';
-  if (score >= 6.25) return 'B+';
-  if (score >= 5.25) return 'B';
-  if (score >= 4.25) return 'C+';
-  if (score >= 3.25) return 'C';
+// Expects a score on the public 1–10 scale (see toScoreTen). The letter
+// bands are the same grading the app has always used; only the underlying
+// number changed from 0.5–9 to 1–10.
+export function ratingFromScore(score10) {
+  if (score10 >= 9) return 'A+';
+  if (score10 >= 8) return 'A';
+  if (score10 >= 7) return 'B+';
+  if (score10 >= 6) return 'B';
+  if (score10 >= 5) return 'C+';
+  if (score10 >= 4) return 'C';
   return 'D';
 }
 
@@ -281,16 +346,19 @@ export function compositeRatings(pillars) {
       }
     }
     const score = weightSum > 0 ? total / weightSum : 0;
-    out[frame] = { score, rating: ratingFromScore(score), keyDriver };
+    // `score` stays on the internal scale — the narrative/action text below
+    // is tuned against it. `score10` is the public 1–10 figure shown in the UI.
+    const score10 = toScoreTen(score);
+    out[frame] = { score, score10, rating: ratingFromScore(score10), keyDriver };
   }
   return out;
 }
 
-export function scorePillars(ind, fundamentals, context = {}) {
+export function scorePillars(ind, fundamentals, context = {}, bandarmology = null) {
   return {
     technical: technicalScore(ind),
     trend: trendScore(ind),
-    flow: flowScore(ind),
+    flow: flowScore(ind, bandarmology),
     fundamental: fundamentalScore(fundamentals, context),
   };
 }
@@ -365,11 +433,11 @@ function actionText(ind, ratings) {
 
 // ---------- report builder ----------
 
-export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, emitenInfo }) {
+export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology }) {
   const ind = computeIndicators(chart, requestedDate);
   const cap = marketCap(emitenInfo, ind.close);
   const risk = boardRisk(emitenInfo?.board);
-  const pillars = scorePillars(ind, fundamentals, { risk, cap });
+  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology);
   const ratings = compositeRatings(pillars);
 
   const sentimentScore = (ratings.shortTerm.score + ratings.midTerm.score) / 2;
@@ -408,7 +476,7 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
       avgValueTraded20: ind.avgValueTraded20,
       volumeTrend,
       interpretation: obvTone,
-      rating: ratingFromScore(pillars.flow),
+      rating: ratingFromScore(toScoreTen(pillars.flow)),
     },
     technical: {
       pricePosition: ind.vwap20 != null ? (ind.close >= ind.vwap20 ? 'Above 20-day VWAP' : 'Below 20-day VWAP') : '—',
@@ -421,7 +489,7 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
         ind.vwap20 != null
           ? `Last close ${formatRp(ind.close)} sits ${formatPct((ind.close - ind.vwap20) / ind.vwap20)} ${ind.close >= ind.vwap20 ? 'above' : 'below'} the 20-day VWAP of ${formatRp(ind.vwap20)}, with RSI(14) at ${ind.rsi14?.toFixed(0)}`
           : '',
-      rating: ratingFromScore(pillars.technical),
+      rating: ratingFromScore(toScoreTen(pillars.technical)),
     },
     fundamentals: fundamentals
       ? {
@@ -429,7 +497,7 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
           per: fundamentals.per,
           revenueGrowth: fundamentals.revenueGrowth,
           debtToEquity: fundamentals.debtToEquity,
-          rating: ratingFromScore(pillars.fundamental),
+          rating: ratingFromScore(toScoreTen(pillars.fundamental)),
         }
       : null,
     trend: {
@@ -437,7 +505,7 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
       oneMonth: ind.oneMonth,
       threeMonths: ind.threeMonths,
       volumeTrend,
-      rating: ratingFromScore(pillars.trend),
+      rating: ratingFromScore(toScoreTen(pillars.trend)),
     },
     overallRatings: ratings,
     briefRationale: rationaleText(ind, pillars, fundamentals),
@@ -456,14 +524,17 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
 }
 
 // Compact scoring used by the screening page.
-export function buildScreeningScore({ code, requestedDate, chart, fundamentals, emitenInfo }) {
+export function buildScreeningScore({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology }) {
   const ind = computeIndicators(chart, requestedDate);
   const cap = marketCap(emitenInfo, ind.close);
   const risk = boardRisk(emitenInfo?.board);
-  const pillars = scorePillars(ind, fundamentals, { risk, cap });
+  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology);
   const ratings = compositeRatings(pillars);
-  const composite =
+  // Weighted on the internal scale (matching each frame's narrative scoring),
+  // then converted once to the public 1–10 figure shown in the screening table.
+  const compositeRaw =
     ratings.shortTerm.score * 0.35 + ratings.midTerm.score * 0.35 + ratings.longTerm.score * 0.3;
+  const composite = toScoreTen(compositeRaw);
   return {
     ticker: code.toUpperCase(),
     name: emitenInfo?.name ?? chart.name,

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-17T00:00:00.000Z",
+  "title": "Design System: IDX Stock Analysis & Screening",
+  "extensions": {
+    "colorMeta": {
+      "brand": { "role": "primary", "displayName": "Stockbit Green", "canonical": "oklch(0.70 0.13 158)", "tonalRamp": ["#001f00","#003c0d","#005b2a","#007b48","#2a9d67","#54c088","#7ae4aa","#9effcd"] },
+      "on-brand": { "role": "primary", "displayName": "On-Brand Ink", "canonical": "#08130d", "tonalRamp": ["#001f00","#003c0d","#005b2a","#007b48","#2a9d67","#54c088","#7ae4aa","#9effcd"] },
+      "brand-strong": { "role": "primary", "displayName": "Brand Strong (green-as-text)", "canonical": "oklch(0.55 0.13 158)", "tonalRamp": ["#001f00","#003c0d","#005b2a","#007b48","#2a9d67","#54c088","#7ae4aa","#9effcd"] },
+      "info": { "role": "tertiary", "displayName": "Signal Blue", "canonical": "oklch(0.55 0.16 265)", "tonalRamp": ["#040056","#041979","#1b3d9c","#385ec0","#5680e6","#76a3ff","#97c7ff","#baecff"] },
+      "pos": { "role": "verdict", "displayName": "Up Green", "canonical": "oklch(0.55 0.13 158)", "tonalRamp": ["#001f00","#003c0d","#005b2a","#007b48","#2a9d67","#54c088","#7ae4aa","#9effcd"] },
+      "neg": { "role": "verdict", "displayName": "Down Red", "canonical": "oklch(0.52 0.17 25)", "tonalRamp": ["#430000","#680000","#8d000e","#b32e2f","#da534f","#ff7670","#ff9a91","#ffbeb4"] },
+      "warn": { "role": "verdict", "displayName": "Hold Amber", "canonical": "oklch(0.48 0.11 75)", "tonalRamp": ["#2b0100","#491e00","#693c00","#8a5b00","#ad7c2f","#d09d53","#f5c076","#ffe499"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(0.24 0.01 250)", "tonalRamp": ["#0f1215","#282c2f","#44484c","#63666b","#83878b","#a4a8ad","#c7cbd0","#ebeff4"] },
+      "paper": { "role": "neutral", "displayName": "Paper (day) / Trading Floor (night)", "canonical": "#ffffff", "tonalRamp": ["#0f1215","#282c2f","#44484c","#63666b","#83878b","#a4a8ad","#c7cbd0","#ebeff4"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Newsreader serif)", "purpose": "Masthead, big report/stage headings, large rating figures. Fixed rem scale, never fluid." },
+      "title": { "displayName": "Title (Newsreader serif)", "purpose": "Section headings inside a report. Sentence case only." },
+      "body": { "displayName": "Body (IBM Plex Sans)", "purpose": "UI copy, labels, descriptions, buttons. Prose caps near 65ch." },
+      "label": { "displayName": "Label / Figure (IBM Plex Mono)", "purpose": "Kickers, prices, dates, scores, tickers — always tabular-nums." }
+    },
+    "shadows": [
+      { "name": "resting-card", "value": "0 1px 2px rgb(0 0 0 / 0.05)", "purpose": "Inputs and inline panels. Barely-there grounding." },
+      { "name": "floating-menu", "value": "0 12px 24px rgb(0 0 0 / 0.10)", "purpose": "Autocomplete dropdowns, settings popover, filters panel." },
+      { "name": "modal", "value": "0 24px 48px rgb(0 0 0 / 0.20)", "purpose": "Upload / confirm dialogs over a dimmed backdrop." }
+    ],
+    "motion": [
+      { "name": "ease-out-quint", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Default entrance/transition easing — list items, dropdowns, stages." },
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Report rise-and-fade and success pulses." },
+      { "name": "color-150", "value": "150ms", "purpose": "Interactive color/border transitions on hover/focus." },
+      { "name": "theme-200", "value": "200ms", "purpose": "Body background/color crossfade when toggling light/dark." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "container", "value": "56rem (max-w-4xl single column)" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one green action. Dark on-brand text, never white. Lifts on hover, settles on press.",
+      "html": "<button class=\"ds-btn-primary\">Run Screening</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:10px 20px; border:none; border-radius:8px; background:var(--c-brand); color:var(--c-on-brand); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-primary:hover { background:var(--c-brand-deep); transform:translateY(-1px); } .ds-btn-primary:active { transform:translateY(0) scale(0.98); } .ds-btn-primary:focus-visible { outline:2px solid var(--c-brand); outline-offset:2px; } .ds-btn-primary:disabled { opacity:0.45; cursor:not-allowed; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "The secondary affordance — bordered, muted ink, transparent fill. Firms up on hover.",
+      "html": "<button class=\"ds-btn-quiet\">Attach broker screenshots</button>",
+      "css": ".ds-btn-quiet { display:inline-flex; align-items:center; min-height:44px; padding:10px 20px; border:1px solid var(--c-line); border-radius:8px; background:transparent; color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:border-color 150ms ease, color 150ms ease, transform 150ms ease; } .ds-btn-quiet:hover { border-color:var(--c-ink-muted); color:var(--c-ink); transform:translateY(-1px); } .ds-btn-quiet:active { transform:translateY(0) scale(0.98); } .ds-btn-quiet:focus-visible { outline:2px solid var(--c-brand); outline-offset:2px; }"
+    },
+    {
+      "name": "Verdict Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Tinted background + same-hue text. Tone is chosen by meaning (here: accumulation = up green).",
+      "html": "<span class=\"ds-pill ds-pill-pos\">Acc</span>",
+      "css": ".ds-pill { display:inline-block; padding:2px 10px; border-radius:9999px; font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.75rem; font-weight:500; } .ds-pill-pos { background:var(--c-pos-tint); color:var(--c-pos); } .ds-pill-neg { background:var(--c-neg-tint); color:var(--c-neg); } .ds-pill-warn { background:var(--c-warn-tint); color:var(--c-warn); } .ds-pill-info { background:var(--c-info-tint); color:var(--c-info); }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Mono ticker field. Border shifts to green with a soft ring on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Check a ticker — e.g. “ASII”\" />",
+      "css": ".ds-input { width:100%; padding:10px 14px; border:1px solid var(--c-line); border-radius:8px; background:var(--c-paper); color:var(--c-ink); font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:0.875rem; transition:border-color 150ms ease, box-shadow 150ms ease; } .ds-input::placeholder { font-family:'IBM Plex Sans',system-ui,sans-serif; color:var(--c-ink-muted); } .ds-input:hover { border-color:var(--c-ink-muted); } .ds-input:focus { outline:none; border-color:var(--c-brand); box-shadow:0 0 0 3px color-mix(in srgb, var(--c-brand) 20%, transparent); }"
+    },
+    {
+      "name": "Nav Tab",
+      "kind": "nav",
+      "refersTo": "nav-tab",
+      "description": "Top tab. Active = ink over a 2px green underline; inactive = muted with a faint brand hover.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-tab ds-tab-active\">Stock Screening</a><a class=\"ds-tab\">AI Status</a></nav>",
+      "css": ".ds-nav { display:flex; gap:24px; } .ds-tab { padding-bottom:12px; border-bottom:2px solid transparent; color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; text-decoration:none; cursor:pointer; transition:color 150ms ease, border-color 150ms ease; } .ds-tab:hover { color:var(--c-ink); border-color:color-mix(in srgb, var(--c-brand) 20%, transparent); } .ds-tab-active { color:var(--c-ink); border-color:var(--c-brand); }"
+    },
+    {
+      "name": "Theme Toggle",
+      "kind": "custom",
+      "refersTo": "toggle-active",
+      "description": "Segmented light/dark control from the settings popover. Active segment = green fill + on-brand text.",
+      "html": "<div class=\"ds-toggle\"><button class=\"ds-seg ds-seg-active\">☀ Light</button><button class=\"ds-seg\">☾ Dark</button></div>",
+      "css": ".ds-toggle { display:inline-flex; gap:4px; padding:4px; border:1px solid var(--c-line); border-radius:9999px; background:color-mix(in srgb, var(--c-well) 60%, transparent); } .ds-seg { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:0 12px; border:none; border-radius:9999px; background:transparent; color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.75rem; font-weight:500; cursor:pointer; transition:background-color 200ms ease, color 200ms ease; } .ds-seg:hover { color:var(--c-ink); } .ds-seg-active { background:var(--c-brand); color:var(--c-on-brand); }"
+    },
+    {
+      "name": "Dotted-Leader Row",
+      "kind": "custom",
+      "refersTo": "row",
+      "description": "The typographic spine: muted label · dotted leader · tabular value, optionally verdict-toned.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-row-label\">Stop loss</span><span class=\"ds-row-leader\"></span><span class=\"ds-row-value ds-row-neg\">Rp 2,840</span></div>",
+      "css": ".ds-row { display:flex; align-items:baseline; gap:8px; padding:6px 0; } .ds-row-label { flex-shrink:0; color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; } .ds-row-leader { flex:1; min-width:16px; transform:translateY(-4px); border-bottom:1px dotted var(--c-line); } .ds-row-value { text-align:right; font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:0.875rem; font-weight:500; font-variant-numeric:tabular-nums; color:var(--c-ink); } .ds-row-neg { color:var(--c-neg); } .ds-row-pos { color:var(--c-pos); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Reading Room Terminal",
+    "overview": "A quiet research desk that happens to read the live order flow. It carries itself like a well-typeset equity-research note — serif masthead, dotted-leader rows, sentence-case headings, generous air around the numbers — but it is wired to the Indonesia Stock Exchange tape, so a single decisive green can light up when the flow says something. Typography and restraint do the reading-room work; one Stockbit green does the terminal work. The surface comes in two ambient settings: Day is a pure-white reading room, Night is a near-black trading floor, both carried by one token set the user flips from the gear in the top-right. Color is always a verdict, never decoration.",
+    "keyCharacteristics": [
+      "Literate, authored feel — the page reads like research, not a feed.",
+      "One decisive green; all other color is semantic verdict only.",
+      "Numbers are the content: tabular figures, aligned columns, dotted-leader rows.",
+      "Dual theme (light reading room / dark trading floor) from one token set.",
+      "Screenshot-ready — any section cropped and shared stands alone legibly."
+    ],
+    "rules": [
+      { "name": "The On-Brand Rule", "body": "A green fill never carries white text. White-on-#13b87a fails contrast (2.6:1); white-on-#1ece85 fails worse (2.0:1). Green fills carry on-brand (#08130d) dark text. When green must be text, use brand-strong, never brand.", "section": "colors" },
+      { "name": "The Verdict Rule", "body": "Green, red, and amber appear only where they carry direction, rating, or risk. A gain or loss always also carries a +/− sign or word — color is never the sole signal.", "section": "colors" },
+      { "name": "The Untinted Paper Rule", "body": "The light ground is pure #ffffff, chroma 0. Warmth is forbidden in the paper; identity lives in the green, the type, and the data.", "section": "colors" },
+      { "name": "The Sentence-Case Rule", "body": "Headings are sentence case — never ALL CAPS. Short mono section labels are the one rationed exception.", "section": "typography" },
+      { "name": "The Tabular Rule", "body": "Any number in a column is mono with tabular-nums; scores and grades align to fixed-width columns so the eye scans straight down.", "section": "typography" },
+      { "name": "The No-Card-Stack Rule", "body": "Surfaces separate with hairlines and dotted leaders, not cards. Nested cards are forbidden everywhere.", "section": "elevation" },
+      { "name": "The Surface-Over-Shadow Rule", "body": "In dark mode, elevation is a lighter surface (#1b2026) plus a brighter border — never a darker shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do carry on-brand (#08130d) text on every green fill; reach for brand-strong when green must be text. Never white on green.",
+      "Do keep color a verdict — green/red/amber only where direction, rating, or risk is meant, always paired with a +/− sign or word.",
+      "Do set every figure in IBM Plex Mono with tabular-nums and align scores/grades to fixed-width columns.",
+      "Do separate sections with hairlines and dotted leaders; keep the single centered max-w-4xl column.",
+      "Do lift night-mode overlays onto the elevated surface (#1b2026) with a brighter hairline, not a darker shadow.",
+      "Do keep the light ground pure #ffffff and let the green, type, and data carry identity."
+    ],
+    "donts": [
+      "Don't reproduce Bloomberg-terminal clutter — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.",
+      "Don't drift into crypto-hype aesthetics — no neon glows, no gamified urgency, no gradient text.",
+      "Don't ship a generic indigo SaaS dashboard — the one accent is Stockbit green, never default Tailwind blue/indigo.",
+      "Don't stack or nest cards; don't tile the report into identical boxes.",
+      "Don't tint the paper warm or use a fluid clamp() display scale.",
+      "Don't rely on color alone, hover alone, or shadow alone to carry meaning."
+    ]
+  }
+}

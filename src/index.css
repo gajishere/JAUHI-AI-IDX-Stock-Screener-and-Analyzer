@@ -2,17 +2,82 @@
 @config "../tailwind.config.js";
 
 @layer base {
+  :root {
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* ===== Light theme — Stockbit "day" palette ===== */
+    /* Surfaces */
+    --c-paper: #ffffff;
+    --c-well: #f5f6f7;
+    --c-well-2: #eceef0;
+    --c-line: #e6e8ea;
+    --c-elevated: #ffffff;
+    /* Text */
+    --c-ink: #16181c;
+    --c-ink-muted: #6b7177;
+    /* Brand — bright Stockbit green for fills; dark text rides on top of it
+       (matching the reference's buttons); a darker green reads as text on light. */
+    --c-brand: #13b87a;
+    --c-brand-deep: #0f9966;
+    --c-brand-tint: #e4f6ee;
+    --c-on-brand: #08130d;
+    --c-brand-strong: #0a7d54;
+    /* Informational accent — Stockbit blue */
+    --c-info: #2f6bff;
+    --c-info-tint: #e9efff;
+    /* Semantic verdicts — foreground values dark enough to pass AA as text */
+    --c-pos: #0a7d54;
+    --c-pos-tint: #e4f6ee;
+    --c-neg: #c92a36;
+    --c-neg-tint: #fdebec;
+    --c-warn: #8a5e00;
+    --c-warn-tint: #fbf2dd;
+  }
+
+  .dark {
+    /* ===== Dark theme — Stockbit "night" palette ===== */
+    /* Surfaces */
+    --c-paper: #0d0f12;
+    --c-well: #16191d;
+    --c-well-2: #20252b;
+    --c-line: #2f353d;
+    --c-elevated: #1b2026;
+    /* Text */
+    --c-ink: #eef1f4;
+    --c-ink-muted: #8b929b;
+    /* Brand — brighter green for dark ground; dark text still rides on the fill,
+       and a light green reads as text on dark surfaces. */
+    --c-brand: #1ece85;
+    --c-brand-deep: #18b876;
+    --c-brand-tint: #11271f;
+    --c-on-brand: #08130d;
+    --c-brand-strong: #2ad88f;
+    /* Informational accent */
+    --c-info: #5286ff;
+    --c-info-tint: #16223d;
+    /* Semantic verdicts — already pass comfortably on the dark ground */
+    --c-pos: #1ece85;
+    --c-pos-tint: #0f2a20;
+    --c-neg: #ff5b66;
+    --c-neg-tint: #331519;
+    --c-warn: #e8a93c;
+    --c-warn-tint: #2c2410;
+  }
+
   body {
     @apply bg-paper text-ink font-sans antialiased;
     font-feature-settings: "calt", "liga";
+    transition: background-color 200ms var(--ease-out-quint), color 200ms var(--ease-out-quint);
   }
 
   ::selection {
-    background: oklch(0.52 0.13 47 / 0.16);
+    background: color-mix(in srgb, var(--c-brand) 22%, transparent);
   }
 
   :focus-visible {
-    outline: 2px solid oklch(0.52 0.13 47);
+    outline: 2px solid var(--c-brand);
     outline-offset: 2px;
     border-radius: 2px;
   }
@@ -28,12 +93,15 @@
 
   /* Staggered animation for list items */
   .list-item-enter {
-    opacity: 0;
-    transform: translateY(10px);
-    animation: list-item-slide-in 0.3s ease-out forwards;
+    animation: list-item-slide-in 240ms var(--ease-out-quint) both;
+    animation-delay: calc(var(--i, 0) * 35ms);
   }
 
   @keyframes list-item-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
     to {
       opacity: 1;
       transform: translateY(0);
@@ -42,12 +110,15 @@
 
   /* Dropdown menu entrance */
   .dropdown-enter {
-    opacity: 0;
-    transform: translateY(-10px);
-    animation: dropdown-slide-down 0.2s ease-out forwards;
+    animation: dropdown-slide-down 180ms var(--ease-out-quint) both;
+    transform-origin: top;
   }
 
   @keyframes dropdown-slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scaleY(0.98);
+    }
     to {
       opacity: 1;
       transform: translateY(0);
@@ -64,56 +135,21 @@
     @apply bg-well-2;
   }
 
-  /* Button press feedback */
-  .btn-press-active {
-    transform: scale(0.95);
-    transition-duration: 100ms;
-  }
-
-  /* Enhanced button hover */
-  .btn-hover {
-    transition-duration: 200ms;
+  .route-panel {
+    animation: route-panel-in 220ms var(--ease-out-quint) both;
   }
 
   /* Table row animations for results */
   .result-row-enter {
-    opacity: 0;
-    transform: translateY(16px);
-    animation: result-row-slide-in 0.4s ease-out forwards;
-  }
-
-  .result-row-enter-delay-0 {
-    animation-delay: 0s;
-  }
-  .result-row-enter-delay-1 {
-    animation-delay: 0.05s;
-  }
-  .result-row-enter-delay-2 {
-    animation-delay: 0.1s;
-  }
-  .result-row-enter-delay-3 {
-    animation-delay: 0.15s;
-  }
-  .result-row-enter-delay-4 {
-    animation-delay: 0.2s;
-  }
-  .result-row-enter-delay-5 {
-    animation-delay: 0.25s;
-  }
-  .result-row-enter-delay-6 {
-    animation-delay: 0.3s;
-  }
-  .result-row-enter-delay-7 {
-    animation-delay: 0.35s;
-  }
-  .result-row-enter-delay-8 {
-    animation-delay: 0.4s;
-  }
-  .result-row-enter-delay-9 {
-    animation-delay: 0.45s;
+    animation: result-row-slide-in 320ms var(--ease-out-quint) both;
+    animation-delay: calc(min(var(--i, 0), 9) * 35ms);
   }
 
   @keyframes result-row-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
     to {
       opacity: 1;
       transform: translateY(0);
@@ -122,16 +158,16 @@
 
   /* Success feedback animation */
   .success-pulse {
-    animation: success-pulse-check 0.6s ease-out;
+    animation: success-pulse-check 420ms var(--ease-out-expo);
   }
 
   @keyframes success-pulse-check {
     0% {
-      transform: scale(0.8);
+      transform: scale(0.86);
       opacity: 0;
     }
-    50% {
-      transform: scale(1.05);
+    55% {
+      transform: scale(1.04);
       opacity: 1;
     }
     100% {
@@ -142,19 +178,19 @@
 
   /* Enhanced modal animations */
   .modal-enter {
-    animation: modal-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: modal-rise 240ms var(--ease-out-quint) both;
   }
 
   .modal-enter-backdrop {
-    animation: modal-fade 0.3s ease-out forwards;
+    animation: modal-fade 180ms ease-out both;
   }
 
   .modal-leave {
-    animation: modal-rise 0.2s ease-in reverse forwards;
+    animation: modal-rise 180ms ease-in reverse forwards;
   }
 
   .modal-leave-backdrop {
-    animation: modal-fade 0.2s ease-in reverse forwards;
+    animation: modal-fade 140ms ease-in reverse forwards;
   }
 
 
@@ -181,15 +217,7 @@
   /* Enhanced skeleton loading */
   .skeleton-enhanced {
     @apply rounded bg-well-2;
-    background-position: -200% 0;
-    background-size: 200% 100%;
-    animation: skeleton-pulse-enhanced 1.5s ease-in-out infinite;
-  }
-
-  @keyframes skeleton-pulse-enhanced {
-    to {
-      background-position: 200% 0;
-    }
+    animation: pulse-soft 1.5s ease-in-out infinite;
   }
 
   /* Screen reader handling */
@@ -205,7 +233,15 @@
 @layer components {
   /* Report sections fade up as they arrive; visible by default if motion is off */
   .report-enter {
-    animation: rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: rise-in 360ms var(--ease-out-quint) both;
+  }
+
+  .checkmark-pop {
+    animation: checkmark-pop 240ms var(--ease-out-quint) both;
+  }
+
+  .month-enter {
+    animation: month-slide-in 180ms var(--ease-out-quint) both;
   }
 
   .skeleton {
@@ -219,9 +255,9 @@
     opacity: 0;
     margin-top: 0;
     transition:
-      grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      grid-template-rows 300ms var(--ease-out-quint),
       opacity 220ms ease,
-      margin-top 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      margin-top 300ms var(--ease-out-quint);
   }
 
   .details-collapse > div {
@@ -244,9 +280,9 @@
     height: 18px;
     overflow: hidden;
     border-radius: 999px;
-    border: 1px solid oklch(0.885 0.004 48);
+    border: 1px solid var(--c-line);
     padding: 3px 6px;
-    background: oklch(0.967 0.003 48 / 0.55);
+    background: color-mix(in srgb, var(--c-well) 55%, transparent);
   }
 
   .jauhi-scan::after {
@@ -254,8 +290,8 @@
     position: absolute;
     inset: 0;
     width: 45%;
-    background: linear-gradient(90deg, transparent, oklch(0.52 0.13 47 / 0.26), transparent);
-    animation: jauhi-sweep 1.45s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c-brand) 26%, transparent), transparent);
+    animation: jauhi-sweep 1.45s var(--ease-out-quint) infinite;
   }
 
   .jauhi-scan span {
@@ -263,7 +299,7 @@
     z-index: 1;
     width: 4px;
     border-radius: 999px;
-    background: oklch(0.52 0.13 47);
+    background: var(--c-brand);
     opacity: 0.42;
     animation: jauhi-bars 1.1s ease-in-out infinite;
   }
@@ -294,9 +330,45 @@
   }
 }
 
+@keyframes route-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes checkmark-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes month-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--slide-dir, 0) * 12px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Stepped flow: each stage rises in as it becomes active */
 .stage-enter {
-  animation: stage-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: stage-rise 360ms var(--ease-out-quint) both;
 }
 
 @keyframes stage-rise {
@@ -341,6 +413,15 @@
   .report-enter {
     animation: none;
   }
+  .route-panel {
+    animation: none;
+  }
+  .checkmark-pop {
+    animation: none;
+  }
+  .month-enter {
+    animation: none;
+  }
   .skeleton,
   .skeleton-enhanced {
     animation: none;
@@ -362,16 +443,7 @@
   .jauhi-scan span {
     animation: none;
   }
-  .result-row-enter-delay-0,
-  .result-row-enter-delay-1,
-  .result-row-enter-delay-2,
-  .result-row-enter-delay-3,
-  .result-row-enter-delay-4,
-  .result-row-enter-delay-5,
-  .result-row-enter-delay-6,
-  .result-row-enter-delay-7,
-  .result-row-enter-delay-8,
-  .result-row-enter-delay-9 {
+  .result-row-enter {
     animation: none;
   }
   .success-pulse {

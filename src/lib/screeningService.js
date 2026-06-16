@@ -4,6 +4,7 @@
 
 import { fetchSymbolChart, fetchFundamentals } from './marketData.js';
 import { buildScreeningScore, formatRpCompact, formatPct } from './analysis.js';
+import { fetchBandarmology } from './idxApi.js';
 import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory, capTierBounds } from './screeningCategories.js';
@@ -179,24 +180,36 @@ Provide rank adjustments to reorder the list.
 Return ONLY the JSON structure specified in the system prompt.
 `;
 
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: [{ type: 'text', text: userPrompt }]
-        }]
-      })
-    });
+    // Bound the call: the proxy→Anthropic link occasionally stalls, and a raw
+    // fetch would otherwise hang for the OS TCP timeout (~100s) before failing.
+    // The judge only reorders/explains an already-correct deterministic ranking,
+    // so aborting at 30s and falling back to that ranking is a fine trade.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    let response;
+    try {
+      response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [{
+            role: 'user',
+            content: [{ type: 'text', text: userPrompt }]
+          }]
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       throw new Error(`Claude API error: ${response.status}`);
@@ -402,9 +415,18 @@ async function enrichCandidate(candidate, date, range, category, ctx = {}) {
       });
     }
 
+    // Bandarmology is NOT fetched here. The IDX API is throttled to ~1 req/s, so
+    // fetching it for the whole shortlist (~60 names) would serialize into a
+    // ~72s wall. Instead we score the shortlist without it, then fetch it only
+    // for the surfaced top-N and re-score those (see screeningStage1). The
+    // last-trade session in the as-of window is carried out so that re-score can
+    // key the fetch off the right date (matching the analysis page's `asOf`).
+    const asOfSession = asOfCandles[asOfCandles.length - 1]?.date ?? date;
+
     // 1Y beta vs IHSG — only when the category scores it (Conglomerate).
     const beta = category.beta ? computeBeta(asOfCandles, ctx.indexCloseByDate) : null;
 
+    const emitenInfo = findEmiten(candidate.ticker);
     let score;
     try {
       score = buildScreeningScore({
@@ -412,7 +434,8 @@ async function enrichCandidate(candidate, date, range, category, ctx = {}) {
         requestedDate: date,
         chart: datedChart,
         fundamentals,
-        emitenInfo: findEmiten(candidate.ticker),
+        emitenInfo,
+        bandarmology: null,
       });
     } catch {
       return { data: null, status: 'nodata' };
@@ -447,11 +470,17 @@ async function enrichCandidate(candidate, date, range, category, ctx = {}) {
       sector: candidate.sector ?? null,
       reason: candidate.reason,
       fundamentals,
+      // Filled in for the surfaced top-N only, by the bandarmology re-score pass
+      // in screeningStage1. Null here means "not yet fetched", not "no data".
+      bandarmology: null,
       turnover,
       velocityOk,
       beta,
     };
-    return { data, status: 'ok' };
+    // Inputs the top-N re-score needs to recompute the score WITH bandarmology,
+    // returned on the wrapper (not on `data`) so the chart never rides along into
+    // candidate state or the AI-judge prompt. asOfSession keys the bandar fetch.
+    return { data, status: 'ok', rescore: { chart: datedChart, fundamentals, emitenInfo, asOfSession } };
   } catch {
     // Delisted, rate-limited past retries, or a data hiccup — unusable.
     return { data: null, status: 'error' };
@@ -507,6 +536,12 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       enrichCandidate(c, date, range, category, ctx)
     );
     const usable = results.filter((r) => r && r.data).map((r) => r.data);
+    // Re-score inputs (chart + fundamentals + as-of session) per ticker, used by
+    // the bandarmology pass below to recompute only the surfaced names' scores.
+    const rescoreByTicker = new Map();
+    for (const r of results) {
+      if (r?.data && r.rescore) rescoreByTicker.set(r.data.ticker, r.rescore);
+    }
 
     const matched = usable.filter((d) => matchesCategory(category, d));
 
@@ -520,6 +555,17 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       ordered = [...fast, ...calm];
     } else {
       ordered = [...matched].sort(category.rank);
+    }
+
+    // Pre-warm bandarmology for the deterministic top-N WHILE the AI judge runs.
+    // Both are ~10s and independent; the IDX throttle (~1 req/s) fits ≤count
+    // fetches inside the judge's window, so by the time the judge returns the
+    // re-score below reads them straight from cache. The AI judge only applies
+    // soft rank nudges, so the surfaced set rarely changes — any name it newly
+    // promotes simply misses the warm cache and fetches on demand (still cached).
+    for (const c of ordered.slice(0, count)) {
+      const rc = rescoreByTicker.get(c.ticker);
+      if (rc) fetchBandarmology(c.ticker, { date: rc.asOfSession }).catch(() => {});
     }
 
     // AI Judgment Layer: Review matched candidates and provide explanations
@@ -552,13 +598,61 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
           // Then sort by AI adjustment (higher adjustment = better rank)
           return b.aiRankAdjustment - a.aiRankAdjustment;
         })
-        .map(({ originalIndex, aiRankAdjustment, aiReason, ...rest }) => rest);
+        .map((item) => {
+          const cleaned = { ...item };
+          delete cleaned.originalIndex;
+          delete cleaned.aiRankAdjustment;
+          return cleaned;
+        });
     }
 
-    const finalCandidates = ordered.slice(0, count).map((d) => ({
+    let finalCandidates = ordered.slice(0, count).map((d) => ({
       ...d,
       reason: d.aiReason ? d.aiReason : category.describe(d),
     }));
+
+    // Bandarmology re-score — only the surfaced top-N hit the throttled (~1 req/s)
+    // IDX API, so this is ≤ count calls instead of one per shortlisted name. Each
+    // is fetched for its own last-trade session (cached, so the analysis page
+    // reuses it), folded into the score so it becomes part of the displayed
+    // rating, and attached for the candidate row's Acc/Dist pill.
+    finalCandidates = await Promise.all(
+      finalCandidates.map(async (c) => {
+        const rescore = rescoreByTicker.get(c.ticker);
+        if (!rescore) return c;
+        let bandar = null;
+        try {
+          bandar = await fetchBandarmology(c.ticker, { date: rescore.asOfSession });
+        } catch (e) {
+          console.warn(`Bandarmology fetch failed for ${c.ticker}:`, e.message);
+        }
+        if (!bandar || bandar.empty) return c; // no broker rows — keep bandar-free score
+        let rescored;
+        try {
+          rescored = buildScreeningScore({
+            code: c.ticker,
+            requestedDate: date,
+            chart: rescore.chart,
+            fundamentals: rescore.fundamentals,
+            emitenInfo: rescore.emitenInfo,
+            bandarmology: bandar,
+          });
+        } catch {
+          return { ...c, bandarmology: bandar }; // show the pill even if re-score fails
+        }
+        return {
+          ...c,
+          composite: rescored.composite,
+          overallRating: rescored.overallRating,
+          scores: rescored.scores,
+          keyDriver: rescored.keyDriver,
+          bandarmology: bandar,
+        };
+      }),
+    );
+    // Bandarmology can shift scores within the surfaced set — re-sort so the
+    // displayed order reflects the complete rating.
+    finalCandidates.sort((a, b) => b.composite - a.composite);
 
     return {
       date,
@@ -779,10 +873,26 @@ export const screeningStage2 = async (params) => {
       }
     });
 
-    // Build candidate list for prompt
+    // Composite is on the app's public 1-10 scale; the screening table converts
+    // a returned 0-100 finalScore back to 1-10 via toScoreTen(x, 0, 100) =
+    // 1 + (x/100)*9. This is that conversion's exact inverse, so a grounding
+    // score round-trips back to the same composite instead of drifting.
+    const compositeToGroundingScore = (composite) =>
+      composite != null ? Math.max(0, Math.min(100, ((composite - 1) / 9) * 100)) : null;
+
+    // Build candidate list for prompt. Each line carries the REAL deterministic
+    // score (technical/trend/flow/fundamental + IDX bandarmology, already
+    // computed in Stage 1) as a grounding score the AI must anchor to — Stage 2
+    // is a refinement pass, not an independent re-score from scratch.
     const candidateLines = candidates.map((c, index) => {
       const imgCount = imagesByTicker[c.ticker] ? imagesByTicker[c.ticker].length : 0;
-      return `${index + 1}. ${c.ticker} ${c.sector ? `(${c.sector})` : ''} - ${c.reason || 'JAUHI passed'} [${imgCount} broker screenshot${imgCount !== 1 ? 's' : ''} attached]`;
+      const groundingScore = compositeToGroundingScore(c.activeComposite ?? c.composite);
+      const bandar = c.bandarmology && !c.bandarmology.empty
+        ? `, bandarmology ${c.bandarmology.accdist}${c.bandarmology.top5Accdist ? ` (top-5 ${c.bandarmology.top5Accdist})` : ''}`
+        : '';
+      return `${index + 1}. ${c.ticker} ${c.sector ? `(${c.sector})` : ''} - ${c.reason || 'JAUHI passed'} ` +
+        `[grounding score ${groundingScore != null ? groundingScore.toFixed(0) : 'n/a'}/100${bandar}] ` +
+        `[${imgCount} broker screenshot${imgCount !== 1 ? 's' : ''} attached]`;
     }).join('\n');
 
     // Build the Stage 2 prompt
@@ -797,12 +907,20 @@ PACK HUNTING PATTERNS TO DETECT:
 4. NO PATTERN DETECTED (AMAN): No coordination detected → penalty 0 points
 
 SCORING METHODOLOGY:
-- For each stock, evaluate intrinsic quality based on:
-  * Technical analysis (price action, momentum, support/resistance)
-  * Fundamental analysis (when available)
-  * Overall market conditions and trend alignment
-- Assign a Base Score of 0-100 points reflecting the stock's intrinsic merit
-- Apply Pack Hunting penalty (if detected): Final Score = Base Score - Penalty
+- Each candidate line gives you a "grounding score" — the real, already-computed
+  technical + fundamental + IDX bandarmology score (0-100) from the deterministic
+  screening engine. This is NOT a guess; it is the actual measured quality of the
+  stock as of the screening date. You are refining this score with broker-screenshot
+  evidence, not replacing it with an independent judgment.
+- Default Base Score = the grounding score, unchanged.
+- Only move Base Score away from the grounding score when a candidate has an attached
+  broker screenshot AND that screenshot shows something the grounding score could not
+  already know (e.g. unusual concentration, fresh accumulation/distribution not yet
+  reflected, retail vs institutional skew). Cap any such adjustment at ±10 points and
+  state the reason in rawAnalysis.
+- If a candidate has 0 broker screenshots attached, Base Score MUST equal its grounding
+  score exactly (no penalty, no independent re-score) — there is no new evidence to act on.
+- Apply Pack Hunting penalty (if detected from screenshots): Final Score = Base Score - Penalty
 - Rank stocks by Final Score (highest to lowest)
 
 VERDICT THRESHOLDS based on Final Score:
@@ -831,13 +949,15 @@ Where:
 - status: One of "RED FLAG", "WARNING", "NOISE", or "AMAN"
 - penalty: Number (-35, -25, -15, or 0)
 - ranking: Position in final ranking (1 = best)
-- baseScore: Intrinsic quality score 0-100 before penalties
+- baseScore: The candidate's grounding score, adjusted by at most ±10 points and ONLY when an
+  attached broker screenshot provides genuine new evidence (see SCORING METHODOLOGY) — equal to
+  the grounding score unchanged for any candidate with no screenshots attached
 - finalScore: Base score minus penalty
 - verdict: One of "STRONG", "LAYAK", "HATI-HATI", or "HINDARI" based on finalScore thresholds
 - entry, stopLoss, target: Price levels for trading plan (format: "Rp X,XXX" or "X.XXX")
 - notes: Brief rationale for the trading plan levels
 
-Analyze ALL provided broker screenshots, detect patterns, score each stock, and return the complete JSON structure.
+Analyze ALL provided broker screenshots, detect patterns, and refine each stock's grounding score per the SCORING METHODOLOGY above. Return the complete JSON structure.
 `;
 
     // Build user prompt with candidate and image information
@@ -860,7 +980,8 @@ ${[
 
 Analyze any attached broker screenshots for visible broker activity. If screenshots are general rather than ticker-labeled,
 use them as supporting context only when the ticker is visible in the image; otherwise say the screenshot was not attributable.
-Detect Pack Hunting patterns where visible, evaluate intrinsic quality, apply appropriate penalties, and produce a final ranked trading plan.
+Detect Pack Hunting patterns where visible, refine each candidate's grounding score per the SCORING METHODOLOGY (unchanged
+where there is no screenshot evidence to act on), and produce a final ranked trading plan.
 Provide your response in the exact JSON format specified in the system prompt.
 `;
 
@@ -979,6 +1100,18 @@ Provide your response in the exact JSON format specified in the system prompt.
       throw new Error('Could not parse JSON response from Claude AI');
     }
 
+    // LLMs don't reliably obey "leave this exact number unchanged" — observed
+    // drift of a few points even with explicit instructions. For any ticker with
+    // no screenshot evidence at all (no ticker-labeled image, no general image
+    // to fall back on), force its score back to the grounding score exactly
+    // rather than trust the model's restraint.
+    const groundingByTicker = new Map(
+      candidates.map((c) => [c.ticker, compositeToGroundingScore(c.activeComposite ?? c.composite)]),
+    );
+    const hasEvidence = (ticker) => (imagesByTicker[ticker]?.length > 0) || generalImages.length > 0;
+    const verdictFromScore = (score) =>
+      score >= 75 ? 'STRONG' : score >= 60 ? 'LAYAK' : score >= 45 ? 'HATI-HATI' : 'HINDARI';
+
     // Validate and normalize the response
     const validatedResult = {
       date: result.date || date,
@@ -989,18 +1122,29 @@ Provide your response in the exact JSON format specified in the system prompt.
         status: item.status || 'AMAN',
         penalty: typeof item.penalty === 'number' ? item.penalty : 0
       })).filter(item => item.ticker && /^[A-Z]{2,6}$/.test(item.ticker)) : [],
-      finalRankingTable: Array.isArray(result.finalRankingTable) ? result.finalRankingTable.map(item => ({
-        ranking: typeof item.ranking === 'number' ? item.ranking : 0,
-        ticker: item.ticker?.toUpperCase().replace(/[^A-Z]/g, '') || '',
-        baseScore: typeof item.baseScore === 'number' ? Math.max(0, Math.min(100, item.baseScore)) : 0,
-        penalty: typeof item.penalty === 'number' ? item.penalty : 0,
-        finalScore: typeof item.finalScore === 'number' ? Math.max(0, Math.min(100, item.finalScore)) : 0,
-        verdict: item.verdict || 'HATI-HATI'
-      })).filter(item =>
+      finalRankingTable: Array.isArray(result.finalRankingTable) ? result.finalRankingTable.map(item => {
+        const ticker = item.ticker?.toUpperCase().replace(/[^A-Z]/g, '') || '';
+        const grounding = groundingByTicker.get(ticker);
+        const noEvidence = grounding != null && !hasEvidence(ticker);
+        const baseScore = noEvidence
+          ? grounding
+          : (typeof item.baseScore === 'number' ? Math.max(0, Math.min(100, item.baseScore)) : 0);
+        const penalty = noEvidence ? 0 : (typeof item.penalty === 'number' ? item.penalty : 0);
+        const finalScore = noEvidence ? grounding : Math.max(0, Math.min(100, baseScore - penalty));
+        return {
+          ranking: typeof item.ranking === 'number' ? item.ranking : 0,
+          ticker,
+          baseScore,
+          penalty,
+          finalScore,
+          verdict: noEvidence ? verdictFromScore(finalScore) : (item.verdict || 'HATI-HATI'),
+        };
+      }).filter(item =>
         item.ticker &&
         /^[A-Z]{2,6}$/.test(item.ticker) &&
         ['STRONG', 'LAYAK', 'HATI-HATI', 'HINDARI'].includes(item.verdict)
-      ) : [],
+      ).sort((a, b) => b.finalScore - a.finalScore)
+        .map((item, index) => ({ ...item, ranking: index + 1 })) : [],
       tradingPlan: Array.isArray(result.tradingPlan) ? result.tradingPlan.map(item => ({
         ticker: item.ticker?.toUpperCase().replace(/[^A-Z]/g, '') || '',
         entry: item.entry || 'Rp 0',

@@ -13,6 +13,17 @@
     />
   </head>
   <body>
+    <script>
+      // Apply the persisted (or system) theme before paint to avoid a flash.
+      (function () {
+        try {
+          var saved = localStorage.getItem('idx-theme');
+          var dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   <!-- impeccable-live-start -->

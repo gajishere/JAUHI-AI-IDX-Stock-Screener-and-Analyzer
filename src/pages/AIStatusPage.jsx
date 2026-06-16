@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PrimaryButton, QuietButton } from '../components/report';
 import { claudeAIService } from '../lib/claudeAI';
 import { clearAILogs, getAIStatusSnapshot, subscribeAIStatus } from '../lib/aiSession';
+import { useT } from '../lib/i18n';
 
-function formatTime(value) {
-  if (!value) return 'Never';
+function formatTime(value, neverLabel = 'Never') {
+  if (!value) return neverLabel;
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -92,6 +93,7 @@ function DetailSection({ section }) {
 }
 
 export default function AIStatusPage() {
+  const t = useT();
   const [snapshot, setSnapshot] = useState(() => getAIStatusSnapshot());
   const [checking, setChecking] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set());
@@ -123,6 +125,16 @@ export default function AIStatusPage() {
     return 'Unchecked';
   }, [snapshot]);
 
+  // Display labels for the internal (English) status value, which must stay
+  // English for the statusTone() comparison above.
+  const statusLabel = {
+    Processing: t('Processing', 'Memproses'),
+    Inactive: t('Inactive', 'Nonaktif'),
+    Error: t('Error', 'Galat'),
+    Available: t('Available', 'Tersedia'),
+    Unchecked: t('Unchecked', 'Belum diperiksa'),
+  };
+
   const toggleDetails = (id) => {
     setExpanded((current) => {
       const next = new Set(current);
@@ -136,35 +148,39 @@ export default function AIStatusPage() {
     <div className="report-enter">
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
         <div>
-          <p className="font-mono text-xs text-ink-muted">Claude runtime</p>
-          <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">AI Status</h2>
+          <p className="font-mono text-xs text-ink-muted">{t('Claude runtime', 'Runtime Claude')}</p>
+          <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">{t('AI Status', 'Status AI')}</h2>
         </div>
         <PrimaryButton onClick={runHealthCheck} loading={checking}>
-          Run live check
+          {t('Run live check', 'Jalankan pemeriksaan langsung')}
         </PrimaryButton>
       </header>
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border border-line p-5">
-          <p className="text-sm text-ink-muted">Runtime status</p>
+          <p className="text-sm text-ink-muted">{t('Runtime status', 'Status runtime')}</p>
           <div className="mt-3 flex items-center gap-2">
             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusTone(status)}`}>
-              {status}
+              {statusLabel[status] ?? status}
             </span>
             {snapshot.active && (
-              <span className="font-mono text-xs text-ink-muted">{snapshot.activeCount} active</span>
+              <span className="font-mono text-xs text-ink-muted">{t(`${snapshot.activeCount} active`, `${snapshot.activeCount} aktif`)}</span>
             )}
           </div>
         </div>
 
         <div className="rounded-lg border border-line p-5">
-          <p className="text-sm text-ink-muted">Configuration</p>
-          <p className="mt-3 text-sm font-medium">{snapshot.configured ? 'API key detected' : 'API key missing'}</p>
+          <p className="text-sm text-ink-muted">{t('Configuration', 'Konfigurasi')}</p>
+          <p className="mt-3 text-sm font-medium">
+            {snapshot.configured
+              ? t('API key detected', 'Kunci API terdeteksi')
+              : t('API key missing', 'Kunci API tidak ada')}
+          </p>
         </div>
 
         <div className="rounded-lg border border-line p-5">
-          <p className="text-sm text-ink-muted">Last successful check</p>
-          <p className="mt-3 font-mono text-sm">{formatTime(snapshot.lastSuccessAt)}</p>
+          <p className="text-sm text-ink-muted">{t('Last successful check', 'Pemeriksaan berhasil terakhir')}</p>
+          <p className="mt-3 font-mono text-sm">{formatTime(snapshot.lastSuccessAt, t('Never', 'Belum pernah'))}</p>
         </div>
       </section>
 
@@ -177,12 +193,12 @@ export default function AIStatusPage() {
       <section className="mt-10 border-t border-line pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-serif text-2xl font-medium">Session Activity</h3>
+            <h3 className="font-serif text-2xl font-medium">{t('Session Activity', 'Aktivitas Sesi')}</h3>
             <p className="mt-1 font-mono text-xs text-ink-muted">
-              Last checked {formatTime(snapshot.lastCheckedAt)}
+              {t('Last checked', 'Terakhir diperiksa')} {formatTime(snapshot.lastCheckedAt, t('Never', 'Belum pernah'))}
             </p>
           </div>
-          <QuietButton onClick={clearAILogs}>Clear log</QuietButton>
+          <QuietButton onClick={clearAILogs}>{t('Clear log', 'Bersihkan log')}</QuietButton>
         </div>
 
         {snapshot.logs.length > 0 ? (
@@ -203,34 +219,36 @@ export default function AIStatusPage() {
                         type="button"
                         onClick={() => toggleDetails(log.id)}
                         aria-expanded={expanded.has(log.id)}
-                        className="rounded-md border border-line px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+                        className="inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted hover:text-ink sm:min-h-8"
                       >
-                        {expanded.has(log.id) ? 'Hide details' : 'Details'}
+                        {expanded.has(log.id) ? t('Hide details', 'Sembunyikan detail') : t('Details', 'Detail')}
                       </button>
                     )}
                   </div>
                   {log.summary && <p className="mt-1 text-sm leading-relaxed text-ink-muted">{log.summary}</p>}
                   {log.details && <p className="mt-2 font-mono text-xs text-ink-muted">{log.details}</p>}
-                  {expanded.has(log.id) && (
-                    <div className="mt-4 space-y-4 rounded-lg border border-line bg-well/30 p-4">
-                      {log.evidence?.note && (
-                        <p className="text-xs leading-relaxed text-ink-muted">{log.evidence.note}</p>
-                      )}
-                      {log.evidence?.sections?.map((section, index) => (
-                        <DetailSection key={`${log.id}-${section.title}-${index}`} section={section} />
-                      ))}
-                      {!log.evidence?.sections?.length && log.details && (
-                        <DetailSection section={{ title: 'Details', text: log.details }} />
-                      )}
+                  <div className={`details-collapse ${expanded.has(log.id) ? 'details-collapse-open' : ''}`} aria-hidden={!expanded.has(log.id)}>
+                    <div>
+                      <div className="mt-4 space-y-4 rounded-lg border border-line bg-well/30 p-4">
+                        {log.evidence?.note && (
+                          <p className="text-xs leading-relaxed text-ink-muted">{log.evidence.note}</p>
+                        )}
+                        {log.evidence?.sections?.map((section, index) => (
+                          <DetailSection key={`${log.id}-${section.title}-${index}`} section={section} />
+                        ))}
+                        {!log.evidence?.sections?.length && log.details && (
+                          <DetailSection section={{ title: t('Details', 'Detail'), text: log.details }} />
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               </li>
             ))}
           </ol>
         ) : (
           <div className="mt-5 rounded-lg border border-line p-5 text-sm text-ink-muted">
-            No AI activity has been recorded in this session.
+            {t('No AI activity has been recorded in this session.', 'Belum ada aktivitas AI yang tercatat pada sesi ini.')}
           </div>
         )}
       </section>

@@ -1,6 +1,7 @@
 // Shared report vocabulary — every analytical surface speaks the same language.
 import { useState } from 'react';
 import { ratingTone } from './reportStyles';
+import { useT } from '../lib/i18n';
 
 const BROKER_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -68,14 +69,14 @@ export function Section({ title, aside, children }) {
 export function Pill({ children, tone = 'info' }) {
   const tones = {
     info: 'bg-info-tint text-info',
-    brand: 'bg-brand-tint text-brand',
+    brand: 'bg-brand-tint text-brand-strong',
     pos: 'bg-pos-tint text-pos',
     warn: 'bg-warn-tint text-warn',
     neg: 'bg-neg-tint text-neg',
     muted: 'bg-well text-ink-muted',
   };
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} transition-[transform,opacity] duration-200 hover:scale-[1.02] active:scale-[0.95]`}>
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} transition-colors duration-150`}>
       {children}
     </span>
   );
@@ -87,12 +88,12 @@ export function PrimaryButton({ children, disabled, loading, type = 'button', on
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className="inline-flex items-center gap-2 rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-white transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:scale-[1.02] active:bg-brand-deep active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-45"
+      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-on-brand transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-brand-deep hover:-translate-y-px active:translate-y-0 active:scale-[0.98] active:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
     >
       {loading && (
         <span
           aria-hidden="true"
-          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
+          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-on-brand/40 border-t-on-brand motion-reduce:animate-none"
         />
       )}
       {children}
@@ -105,7 +106,7 @@ export function QuietButton({ children, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-[transform,opacity] duration-200 hover:border-ink-muted hover:text-ink hover:scale-[1.02] active:bg-well active:scale-[0.95]"
+      className="inline-flex min-h-11 items-center rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-[background-color,border-color,color,transform] duration-150 ease-out hover:-translate-y-px hover:border-ink-muted hover:text-ink active:translate-y-0 active:scale-[0.98] active:bg-well"
     >
       {children}
     </button>
@@ -125,6 +126,7 @@ export function FieldLabel({ children, htmlFor }) {
 // onAdd(File[]); the parent keeps the list and the dedup. Drag-drop is a pointer
 // enhancement — the focusable input inside the label carries the keyboard path.
 export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
+  const t = useT();
   const [dragging, setDragging] = useState(false);
 
   // Materialize the FileList synchronously before the input is cleared.
@@ -147,14 +149,14 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
           setDragging(false);
           addFiles(e.dataTransfer.files);
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 text-center text-sm transition-colors duration-200 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 text-center text-sm transition-[background-color,border-color,transform] duration-200 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
           dragging
-            ? 'border-brand bg-brand-tint/70 text-ink'
-            : 'border-line bg-well/40 text-ink-muted hover:border-ink-muted/60 hover:bg-well/70'
+            ? 'border-brand bg-brand-tint/70 text-ink scale-[1.01]'
+            : 'border-line bg-well/40 text-ink-muted hover:-translate-y-px hover:border-ink-muted/60 hover:bg-well/70'
         }`}
       >
         <svg
-          className={`h-6 w-6 transition-colors duration-200 ${dragging ? 'text-brand' : 'text-ink-muted'}`}
+          className={`h-6 w-6 transition-colors duration-200 ${dragging ? 'text-brand-strong' : 'text-ink-muted'}`}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -163,8 +165,8 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0L8 8m4-4l4 4M4 17v1a3 3 0 003 3h10a3 3 0 003-3v-1" />
         </svg>
-        <span className="font-medium text-ink">{dragging ? 'Drop to attach' : 'Add broker images'}</span>
-        <span className="text-ink-muted">Drag &amp; drop or click · PNG, JPG, WebP, GIF</span>
+        <span className="font-medium text-ink">{dragging ? t('Drop to attach', 'Lepaskan untuk melampirkan') : t('Add broker images', 'Tambah gambar broker')}</span>
+        <span className="text-ink-muted">{t('Drag & drop or click · PNG, JPG, WebP, GIF', 'Seret & lepas atau klik · PNG, JPG, WebP, GIF')}</span>
         <input
           id={id}
           type="file"
@@ -183,7 +185,8 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
           {files.map((file, index) => (
             <li
               key={`${file.name}:${file.size}`}
-              className="flex items-center justify-between gap-3 rounded-md bg-well/60 px-3 py-1.5 text-xs"
+              className="list-item-enter flex items-center justify-between gap-3 rounded-md bg-well/60 px-3 py-1.5 text-xs"
+              style={{ '--i': index }}
             >
               <span className="flex min-w-0 items-baseline gap-2">
                 <span className="truncate text-ink">{file.name}</span>
@@ -193,9 +196,9 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
                 type="button"
                 onClick={() => onRemove(index)}
                 className="-mr-1 shrink-0 rounded px-1.5 py-1 font-medium text-ink-muted transition-[transform,color] duration-200 hover:scale-[1.02] hover:text-neg active:scale-[0.95]"
-                aria-label={`Remove ${file.name}`}
+                aria-label={t(`Remove ${file.name}`, `Hapus ${file.name}`)}
               >
-                Remove
+                {t('Remove', 'Hapus')}
               </button>
             </li>
           ))}
@@ -206,8 +209,9 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
 }
 
 export function ReportSkeleton() {
+  const t = useT();
   return (
-    <div role="status" aria-label="Preparing the report" className="mt-10 space-y-4">
+    <div role="status" aria-label={t('Preparing the report', 'Menyiapkan laporan')} className="mt-10 space-y-4">
       <div className="skeleton h-9 w-2/5" />
       <div className="skeleton h-4 w-3/5" />
       <div className="mt-6 space-y-2.5">

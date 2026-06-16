@@ -1,63 +1,243 @@
-# Design
+---
+name: IDX Stock Analysis & Screening
+description: A literate equity-research desk that reads the live IDX tape — clinical restraint, one decisive green, light or dark.
+colors:
+  # Brand — Stockbit green. Bright value fills; dark text rides on top; a darker green reads as text on light.
+  brand: "#13b87a"
+  brand-dark: "#1ece85"
+  brand-deep: "#0f9966"
+  brand-tint: "#e4f6ee"
+  on-brand: "#08130d"
+  brand-strong: "#0a7d54"
+  # Neutral surfaces
+  paper: "#ffffff"
+  paper-dark: "#0d0f12"
+  well: "#f5f6f7"
+  well-2: "#eceef0"
+  elevated-dark: "#1b2026"
+  line: "#e6e8ea"
+  line-dark: "#2f353d"
+  # Text
+  ink: "#16181c"
+  ink-dark: "#eef1f4"
+  ink-muted: "#6b7177"
+  ink-muted-dark: "#8b929b"
+  # Informational accent
+  info: "#2f6bff"
+  info-dark: "#5286ff"
+  info-tint: "#e9efff"
+  # Semantic verdicts — foreground tuned per theme to pass AA
+  pos: "#0a7d54"
+  pos-dark: "#1ece85"
+  pos-tint: "#e4f6ee"
+  neg: "#c92a36"
+  neg-dark: "#ff5b66"
+  neg-tint: "#fdebec"
+  warn: "#8a5e00"
+  warn-dark: "#e8a93c"
+  warn-tint: "#fbf2dd"
+typography:
+  display:
+    fontFamily: "Newsreader, Georgia, Cambria, serif"
+    fontSize: "2.25rem"
+    fontWeight: 500
+    lineHeight: 1.1
+    letterSpacing: "-0.02em"
+  title:
+    fontFamily: "Newsreader, Georgia, Cambria, serif"
+    fontSize: "1.25rem"
+    fontWeight: 500
+    lineHeight: 1.3
+    letterSpacing: "normal"
+  body:
+    fontFamily: "IBM Plex Sans, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
+  label:
+    fontFamily: "IBM Plex Mono, ui-monospace, monospace"
+    fontSize: "0.75rem"
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: "normal"
+rounded:
+  sm: "6px"
+  md: "8px"
+  lg: "12px"
+  xl: "16px"
+  full: "9999px"
+spacing:
+  hairline: "1px"
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  gutter: "20px"
+  section: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.brand}"
+    textColor: "{colors.on-brand}"
+    rounded: "{rounded.md}"
+    padding: "10px 20px"
+  button-primary-hover:
+    backgroundColor: "{colors.brand-deep}"
+  button-quiet:
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.md}"
+    padding: "10px 20px"
+  pill:
+    backgroundColor: "{colors.well}"
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.full}"
+    padding: "2px 10px"
+  input:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "10px 14px"
+  toggle-active:
+    backgroundColor: "{colors.brand}"
+    textColor: "{colors.on-brand}"
+    rounded: "{rounded.full}"
+    padding: "0 12px"
+---
 
-Visual system for the IDX Stock Analysis & Screening app. Register: **product** (the design serves the analysis workflow). Mood: *weekend equity research desk — printed note, amber bookmark, clinical restraint*. The interface should read like a well-typeset research report, never like a trading terminal.
+# Design System: IDX Stock Analysis & Screening
 
-## Theme
+## 1. Overview
 
-Light. Pure white ground — warmth is carried by the brand color and typography, never by tinting the paper.
+**Creative North Star: "The Reading Room Terminal"**
 
-## Color
+This is a quiet research desk that happens to read the live order flow. It carries itself like a well-typeset equity-research note — serif masthead, dotted-leader rows, sentence-case headings, generous air around the numbers — but it is wired to the Indonesia Stock Exchange tape, so a single decisive green can light up when the flow says something. The two halves never fight: typography and restraint do the reading-room work; one Stockbit green does the terminal work. Everything else is ink and paper.
 
-All tokens are OKLCH, defined in `tailwind.config.js`. Strategy: **Restrained** — neutrals plus one brand accent; semantic color appears only where it carries a verdict.
+The surface comes in two ambient settings. **Day** is a pure-white reading room; **Night** is a near-black trading floor (`#0d0f12`). The same tokens carry both — the user flips them from the gear in the top-right, the choice follows the OS by default and persists. Color is always a verdict, never decoration: a number is green because it went up, red because it went down, amber because it's a hold — never because green is pretty.
 
-| Token | Value | Role |
-|---|---|---|
-| `paper` | `oklch(1 0 0)` | Body background (pure white, never tinted) |
-| `well` | `oklch(0.967 0.003 48)` | Quiet fills (file buttons, muted pills) |
-| `well-2` | `oklch(0.93 0.005 48)` | Deeper fill (skeletons) |
-| `line` | `oklch(0.885 0.004 48)` | Hairlines, borders, dotted leaders |
-| `ink` | `oklch(0.235 0.012 48)` | Body text (16.8:1 on paper) |
-| `ink-muted` | `oklch(0.47 0.015 48)` | Secondary text (6.9:1) |
-| `brand` | `oklch(0.52 0.13 47)` | Burnt amber — primary actions, active tab, focus, selection. Always white text on fills. |
-| `brand-deep` | `oklch(0.44 0.11 47)` | Brand hover/active |
-| `brand-tint` | `oklch(0.96 0.018 47)` | Selected-state fill, brand pills |
-| `info` / `info-tint` | `oklch(0.40 0.06 200)` | Deep teal — neutral informational pills (confidence) |
-| `pos` / `pos-tint` | `oklch(0.49 0.105 155)` | Gains, buys, A-ratings, bullish |
-| `neg` / `neg-tint` | `oklch(0.5 0.16 27)` | Losses, sells, stops, C-ratings, avoid |
-| `warn` / `warn-tint` | `oklch(0.5 0.1 80)` | Ochre — B-ratings, neutral bias, caution |
+What this system explicitly rejects: **Bloomberg-terminal clutter** (wall-to-wall density, ALL-CAPS shouting, ten colors fighting), **crypto-hype aesthetics** (neon glows, gamified urgency), and **generic indigo SaaS dashboard** templates. If a screen starts to feel like any of those, it has drifted.
 
-Rules: color is a verdict, not decoration. Gains/losses always carry a `+`/`−` sign or label in addition to color. Rating tone mapping lives in `src/components/reportStyles.js` (`ratingTone`: A→pos, B→warn, else neg).
+**Key Characteristics:**
+- Literate, authored feel — the page reads like research, not a feed.
+- One decisive green; all other color is semantic verdict only.
+- Numbers are the content: tabular figures, aligned columns, dotted-leader rows.
+- Dual theme (light reading room / dark trading floor) from one token set.
+- Screenshot-ready — any section cropped and shared stands alone legibly.
 
-## Typography
+## 2. Colors
 
-| Family | Use |
-|---|---|
-| **Newsreader** (serif) | Report headings, masthead, ticker symbols in reports, large rating figures. Medium weight, tight tracking on display sizes. |
-| **IBM Plex Sans** | UI, labels, body, buttons (400/500/600) |
-| **IBM Plex Mono** | Figures, prices, dates, kickers, scores — always with `tabular-nums` |
+A near-monochrome ink-and-paper base with exactly one identity color (green) and a tightly rationed set of verdict colors. Every foreground value is tuned per theme to clear WCAG AA (≥4.5:1).
 
-Loaded from Google Fonts in `index.html`. Fixed rem scale (no fluid clamp). Section headings are sentence case — never ALL CAPS (anti-Bloomberg). `text-wrap: balance` on h1–h3, `pretty` on prose (set in `index.css`).
+### Primary
+- **Stockbit Green** (light `#13b87a` / night `#1ece85`): the single identity color. Used as a **fill** for primary actions, the active nav/step, focus ring, and selection. Never carries white text — see the On-Brand rule.
+- **On-Brand Ink** (`#08130d`): the near-black green that rides *on top of* green fills (button labels, active toggle text, step numbers). This is what the reference's green buttons actually do.
+- **Brand Strong** (light `#0a7d54` / night `#2ad88f`): the green darkened (or, at night, lightened) enough to read as **text** on light or tinted surfaces — brand pills, the "Then" flow marker, accent glyphs.
+- **Brand Deep** (`#0f9966`): hover/active state for green fills.
+- **Brand Tint** (light `#e4f6ee` / night `#11271f`): the quiet green fill behind brand pills and selected states.
 
-## Layout
+### Tertiary
+- **Signal Blue** (light `#2f6bff` / night `#5286ff`): neutral informational pills only (confidence, mode). Never an action color — that role belongs to green alone.
 
-- Single centered column, `max-w-4xl`, `px-5`. Reports read like documents; tables may scroll horizontally inside it.
-- Sections separate with hairline rules (`border-t border-line`), not cards. No nested cards anywhere.
-- The signature data element is the **dotted-leader row** (`Row` in `src/components/report.jsx`): muted label · dotted leader · tabular value, optionally toned.
-- Prose blocks cap at `max-w-prose`.
+### Neutral
+- **Paper** (day `#ffffff` / night `#0d0f12`): the body ground. White is never tinted; night is a true near-black trading floor.
+- **Elevated** (day `#ffffff` / night `#1b2026`): floating overlays (modals, popovers, dropdowns, the date calendar). At night it lifts a visible step off the ground so overlays read as a separate layer.
+- **Well / Well-2** (day `#f5f6f7` / `#eceef0`; night `#16191d` / `#20252b`): quiet and deeper fills — muted pills, skeletons, inset panels.
+- **Line** (day `#e6e8ea` / night `#2f353d`): hairlines, borders, and the signature dotted leaders.
+- **Ink / Ink-Muted** (day `#16181c` / `#6b7177`; night `#eef1f4` / `#8b929b`): primary and secondary text.
 
-## Components
+### Verdict (semantic — meaning only)
+- **Up Green** (light `#0a7d54` / night `#1ece85`) on tint `#e4f6ee` / `#0f2a20`: gains, buys, A-ratings, accumulation, bullish.
+- **Down Red** (light `#c92a36` / night `#ff5b66`) on tint `#fdebec` / `#331519`: losses, sells, stop levels, C-ratings, distribution, avoid.
+- **Hold Amber** (light `#8a5e00` / night `#e8a93c`) on tint `#fbf2dd` / `#2c2410`: B-ratings, neutral bias, caution.
 
-Shared vocabulary in `src/components/report.jsx` — always reuse, never re-derive:
-`Section`, `Row`, `RatingBadge`, `RatingFigure`, `Pill` (tones: info/brand/pos/warn/neg/muted), `PrimaryButton` (amber, white text, spinner when loading), `QuietButton`, `FieldLabel`, `ReportSkeleton`. Input classes in `reportStyles.js` (`inputClass`, `fileInputClass`).
+### Named Rules
+**The On-Brand Rule.** A green fill *never* carries white text. White-on-`#13b87a` fails contrast (2.6:1); white-on-`#1ece85` fails worse (2.0:1). Green fills carry `on-brand` (`#08130d`) dark text. When green must be *text*, use `brand-strong`, never `brand`.
 
-States: buttons disable (45% opacity) with an adjacent muted hint explaining what unlocks them — no `alert()` dialogs. Loading uses skeletons (`ReportSkeleton`), not centered spinners. Focus is a 2px brand outline (global, `index.css`).
+**The Verdict Rule.** Green, red, and amber appear only where they carry direction, rating, or risk. A gain or loss always also carries a `+`/`−` sign or word — color is never the sole signal.
 
-## Motion
+**The Untinted Paper Rule.** The light ground is pure `#ffffff`, chroma 0. Warmth is forbidden in the paper; identity lives in the green, the type, and the data.
 
-- 150ms color transitions on interactive elements; nothing else animates on hover.
-- Reports enter with `.report-enter` (400ms rise-and-fade, expo-out). Content is visible by default; animation only enhances.
-- Skeletons pulse softly. All motion collapses under `prefers-reduced-motion: reduce`.
+## 3. Typography
 
-## Voice
+**Display Font:** Newsreader (serif), with Georgia / Cambria fallback.
+**Body Font:** IBM Plex Sans, with system-ui fallback.
+**Label/Mono Font:** IBM Plex Mono, with ui-monospace fallback.
 
-Calm, literate, lowercase-leaning. Kickers are mono lowercase ("Equity flow note · 2026-06-11"), one per masthead — never an eyebrow above every section. Footer carries the standing disclaimer about sample data.
+**Character:** A literary serif paired on a true contrast axis with a clean humanist sans and a precise monospace. The serif gives the masthead and report headings their authored, equity-research voice; the sans keeps the working UI quiet; the mono makes every figure line up. Three families, three jobs, no overlap.
+
+### Hierarchy
+- **Display** (Newsreader 500, 1.5rem–2.25rem, line-height ~1.1, tracking `-0.02em`): the masthead and the big report/stage headings ("Candidates ready"), plus the large rating figures. Fixed rem scale — never fluid `clamp()`; a sidebar-shrinking headline looks worse, not better.
+- **Title** (Newsreader 500, 1.25rem): section headings inside a report. Sentence case, always.
+- **Body** (IBM Plex Sans 400/500, 0.875rem, line-height ~1.55): UI copy, labels, descriptions, buttons. Prose caps at `max-w-prose` (≈65ch).
+- **Label / Figure** (IBM Plex Mono 500, 0.75rem): kickers, prices, dates, scores, tickers — always with `tabular-nums` so columns align. Kickers are lowercase mono ("closing screen · as of 2026-06-15").
+
+### Named Rules
+**The Sentence-Case Rule.** Headings are sentence case — never ALL CAPS. Caps are Bloomberg shouting; this desk speaks at a normal volume. (Short mono section labels like "TOP BUYERS" are the one allowed exception, and stay small and rationed.)
+
+**The Tabular Rule.** Any number that sits in a column — price, score, percentage, lot — is mono with `tabular-nums`. Scores and grades align to fixed-width columns so the eye scans straight down.
+
+## 4. Elevation
+
+Mostly flat, separated by hairlines — not a shadow-heavy system. Sections are divided by `border-t` rules and dotted leaders, never by stacked cards. Shadows are reserved for genuinely floating layers (dropdowns, popovers, modals) and stay soft and low.
+
+In **night** mode, depth is carried by *surface*, not shadow: a black shadow is invisible on a black ground, so floating overlays switch to the lighter `elevated` surface (`#1b2026`) and a brighter hairline (`#2f353d`) to lift off the trading floor.
+
+### Shadow Vocabulary
+- **Resting card** (`box-shadow: 0 1px 2px rgb(0 0 0 / 0.05)`): inputs and inline panels. Barely there.
+- **Floating menu** (`box-shadow: 0 12px 24px rgb(0 0 0 / 0.10)`): autocomplete dropdowns, the settings popover, the filters panel.
+- **Modal** (`box-shadow: 0 24px 48px rgb(0 0 0 / 0.20)`): the upload / confirm dialogs, over a dimmed backdrop.
+
+### Named Rules
+**The No-Card-Stack Rule.** Surfaces separate with hairlines and dotted leaders, not cards. Nested cards are forbidden everywhere. A report reads like a document, not a dashboard of tiles.
+
+**The Surface-Over-Shadow Rule (night).** In dark mode, elevation is a lighter surface plus a brighter border — never a darker shadow. If an overlay looks glued to the ground at night, it's on `paper` when it should be on `elevated`.
+
+## 5. Components
+
+### Buttons
+- **Shape:** gently rounded (6–8px; `rounded-md`). Pills (`rounded-full`) for segmented toggles.
+- **Primary:** green fill (`brand`) with `on-brand` dark text, ~10×20px padding. Hover → `brand-deep` and a 1px lift; active → settle + 0.98 scale. Disabled → 45% opacity with an adjacent muted hint that explains what unlocks it (never an `alert()`).
+- **Quiet:** bordered, `ink-muted` text, transparent fill; hover firms the border and ink. The secondary affordance throughout.
+- **Loading:** an `on-brand` spinner replaces motion inside the same button — no layout shift, no centered overlay spinner.
+
+### Chips / Pills
+- **Style:** `rounded-full`, ~2×10px, tinted background + same-hue text. Tones: `info` (confidence), `brand` (uses `brand-strong` text), `pos` / `warn` / `neg` (verdicts), `muted` (`well` + `ink-muted`).
+- **State:** verdict tone is chosen by meaning, not decoration. Accumulation/distribution pills are clickable to expand the broker summary.
+
+### Cards / Containers
+- **Corner Style:** 12–16px (`rounded-xl` / `rounded-2xl`) on the few real containers (saved-screening box, analysis note).
+- **Background:** `paper`; **Border:** 1px `line`. **Shadow:** resting card only. No nested cards.
+- **Internal Padding:** 20–24px.
+
+### Inputs / Fields
+- **Style:** 1px `line` stroke, `paper` fill, 6–12px radius, mono text for tickers.
+- **Focus:** border shifts to `brand` + a 2–4px `brand`/15–25% ring; a subtle 1.02 scale on the search field. Focus is always a 2px brand outline globally.
+- **Error:** `neg` text below the field, `role="alert"`; the field is never left to fail silently.
+
+### Navigation
+- **Style:** top tab row, IBM Plex Sans 500. Active tab = `ink` text over a 2px `brand` underline; inactive = `ink-muted` with a faint brand-tinted hover. No side nav — the app is a single centered `max-w-4xl` column.
+
+### Stepper (signature)
+A three-stop progress rail (Select Date · Run Screening · Refine with Brokers). Active stop = green fill with `on-brand` number; done = `pos-tint` with a check; todo = `well` + muted. It frames the screening flow as an authored sequence.
+
+### Settings Popover (signature)
+Gear button in the top-right opens an `elevated` popover holding the **theme toggle** (Light/Dark, sun/moon, active = green fill + `on-brand`) and the **language switcher** (EN/ID with drawn SVG flags). Closes on `pointerdown` outside or Escape; touch targets ≥44px; capped to the viewport on narrow phones.
+
+### Dotted-Leader Row (signature)
+The typographic spine: `muted label · dotted leader · tabular value`, value optionally toned by verdict. Every report fact is one of these — it is what makes a cropped screenshot read like research.
+
+## 6. Do's and Don'ts
+
+### Do:
+- **Do** carry `on-brand` (`#08130d`) text on every green fill; reach for `brand-strong` when green must be text. Never white on green.
+- **Do** keep color a verdict — green/red/amber only where direction, rating, or risk is meant, always paired with a `+`/`−` sign or word.
+- **Do** set every figure in IBM Plex Mono with `tabular-nums` and align scores/grades to fixed-width columns.
+- **Do** separate sections with hairlines and dotted leaders; keep the single centered `max-w-4xl` column.
+- **Do** lift night-mode overlays onto the `elevated` surface (`#1b2026`) with a brighter hairline, not a darker shadow.
+- **Do** keep the light ground pure `#ffffff` and let the green, type, and data carry identity.
+
+### Don't:
+- **Don't** reproduce **Bloomberg-terminal clutter** — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.
+- **Don't** drift into **crypto-hype aesthetics** — no neon glows, no gamified urgency, no gradient text.
+- **Don't** ship a **generic indigo SaaS dashboard** — the one accent is Stockbit green, never default Tailwind blue/indigo.
+- **Don't** stack or nest cards; don't tile the report into identical boxes.
+- **Don't** tint the paper warm or use a fluid `clamp()` display scale.
+- **Don't** rely on color alone, hover alone, or shadow alone to carry meaning.

@@ -274,7 +274,7 @@ export default function StockAnalysis() {
                 <ul
                   id={`${tickerFieldId}-listbox`}
                   role="listbox"
-                  className={`absolute left-0 right-0 z-dropdown mt-1.5 max-h-64 overflow-y-auto rounded-md border border-line bg-paper py-1 shadow-lg shadow-ink/5 dropdown-enter`}
+                  className={`absolute left-0 right-0 z-dropdown mt-1.5 max-h-64 overflow-y-auto rounded-md border border-line bg-elevated py-1 shadow-lg shadow-ink/5 dropdown-enter`}
                 >
                   {suggestedTickers.map((suggestion, index) => (
                     <li

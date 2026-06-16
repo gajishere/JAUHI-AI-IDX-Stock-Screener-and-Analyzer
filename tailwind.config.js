@@ -7,28 +7,38 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Surfaces — pure white ground; warmth lives in the brand color, not the paper
-        paper: 'oklch(1 0 0)',
-        well: 'oklch(0.967 0.003 48)',
-        'well-2': 'oklch(0.93 0.005 48)',
-        line: 'oklch(0.885 0.004 48)',
+        // All hues resolve through CSS variables so the whole surface can flip
+        // between the light and dark Stockbit-style palettes (see index.css).
+        // Surfaces
+        paper: 'var(--c-paper)',
+        well: 'var(--c-well)',
+        'well-2': 'var(--c-well-2)',
+        line: 'var(--c-line)',
+        // Elevated — floating overlays (modals, popovers, dropdowns) that need to
+        // lift off the near-black ground in dark mode; identical to paper in light.
+        elevated: 'var(--c-elevated)',
         // Text
-        ink: 'oklch(0.235 0.012 48)',
-        'ink-muted': 'oklch(0.47 0.015 48)',
-        // Brand — burnt amber, used for actions, selection, focus
-        brand: 'oklch(0.52 0.13 47)',
-        'brand-deep': 'oklch(0.44 0.11 47)',
-        'brand-tint': 'oklch(0.96 0.018 47)',
-        // Informational accent — deep teal, used for neutral badges (confidence, mode)
-        info: 'oklch(0.40 0.06 200)',
-        'info-tint': 'oklch(0.955 0.014 200)',
+        ink: 'var(--c-ink)',
+        'ink-muted': 'var(--c-ink-muted)',
+        // Brand — Stockbit green, used for actions, selection, focus
+        brand: 'var(--c-brand)',
+        'brand-deep': 'var(--c-brand-deep)',
+        'brand-tint': 'var(--c-brand-tint)',
+        // Text/icons that sit ON a brand fill — dark, like the reference's green
+        // buttons. White on bright green fails contrast; this passes.
+        'on-brand': 'var(--c-on-brand)',
+        // Brand green darkened enough to read as TEXT on light/tinted surfaces.
+        'brand-strong': 'var(--c-brand-strong)',
+        // Informational accent — used for neutral badges (confidence, mode)
+        info: 'var(--c-info)',
+        'info-tint': 'var(--c-info-tint)',
         // Semantic verdicts — only where meaning is carried
-        pos: 'oklch(0.49 0.105 155)',
-        'pos-tint': 'oklch(0.962 0.03 155)',
-        neg: 'oklch(0.5 0.16 27)',
-        'neg-tint': 'oklch(0.962 0.02 27)',
-        warn: 'oklch(0.5 0.1 80)',
-        'warn-tint': 'oklch(0.965 0.045 95)',
+        pos: 'var(--c-pos)',
+        'pos-tint': 'var(--c-pos-tint)',
+        neg: 'var(--c-neg)',
+        'neg-tint': 'var(--c-neg-tint)',
+        warn: 'var(--c-warn)',
+        'warn-tint': 'var(--c-warn-tint)',
       },
       fontFamily: {
         serif: ['Newsreader', 'Georgia', 'Cambria', 'serif'],

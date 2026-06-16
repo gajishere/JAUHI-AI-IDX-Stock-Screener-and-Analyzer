@@ -1,31 +1,38 @@
+import { useT } from '../lib/i18n';
+
 // Three-dot progress rail shown above the guided input stages.
 export function Stepper({ steps, current }) {
+  const t = useT();
   return (
-    <ol className="mx-auto flex items-center justify-center gap-3" aria-label="Progress">
+    <ol className="mx-auto flex items-center justify-center gap-2 sm:gap-3" aria-label={t('Progress', 'Progres')}>
       {steps.map((label, i) => {
         const step = i + 1;
         const state = step < current ? 'done' : step === current ? 'active' : 'todo';
         return (
-          <li key={label} className="flex items-center gap-3">
+          <li key={label} className="flex items-center gap-2.5 sm:gap-3">
             <span
-              className={`flex items-center gap-2 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-2 text-xs font-medium transition-[color,transform] duration-200 ${
                 state === 'todo' ? 'text-ink-muted/60' : 'text-ink'
               }`}
             >
               <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold transition-colors ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-[background-color,color,transform] duration-200 sm:h-5 sm:w-5 ${
                   state === 'active'
-                    ? 'bg-brand text-white'
+                    ? 'scale-105 bg-brand text-on-brand'
                     : state === 'done'
                       ? 'bg-pos-tint text-pos'
                       : 'bg-well text-ink-muted'
                 }`}
               >
-                {state === 'done' ? '✓' : step}
+                {state === 'done' ? (
+                  <span key="check" className="checkmark-pop" aria-hidden="true">✓</span>
+                ) : (
+                  step
+                )}
               </span>
               <span className={state === 'active' ? '' : 'hidden sm:inline'}>{label}</span>
             </span>
-            {step < steps.length && <span className="h-px w-6 bg-line" aria-hidden="true" />}
+            {step < steps.length && <span className="h-px w-5 bg-line sm:w-6" aria-hidden="true" />}
           </li>
         );
       })}

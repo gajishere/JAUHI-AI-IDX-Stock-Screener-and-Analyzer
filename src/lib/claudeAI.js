@@ -1,11 +1,21 @@
 // Claude AI service for enhanced stock analysis
 import { finishAIActivity, recordAIEvent, setAIConfigured, startAIActivity } from './aiSession';
+import { formatRpCompact } from './analysis';
 
 const evidenceNote = 'This is an evidence and rationale summary generated from app inputs and model outputs, not hidden chain-of-thought.';
 
 function compactText(text, max = 900) {
   if (!text) return '';
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+// Instruction appended to prompts so Claude writes its prose in the language the
+// user has selected in the UI. JSON keys and controlled tokens stay English.
+function languageDirective(language) {
+  if (language === 'id') {
+    return 'RESPONSE LANGUAGE: Write every text field VALUE in natural, professional Bahasa Indonesia for Indonesian retail traders. Keep all JSON keys in English.';
+  }
+  return 'RESPONSE LANGUAGE: Write all text in English.';
 }
 
 async function fileToImageBlock(file) {
@@ -180,7 +190,7 @@ class ClaudeAIService {
   }
 
   // Generate AI-enhanced analysis
-  async getAIEnhancedAnalysis(ticker, analysisData, fundamentals, brokerScreenshots = []) {
+  async getAIEnhancedAnalysis(ticker, analysisData, fundamentals, brokerScreenshots = [], bandar = null, language = 'en') {
     if (!this.isConfigured()) {
       throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in environment variables.');
     }
@@ -189,6 +199,8 @@ class ClaudeAIService {
     const imageBlocks = await prepareImageBlocks(brokerScreenshots);
     const promptText = `
             You are an expert Indonesian stock market analyst. Provide enhanced insights for the following stock analysis data:
+
+            ${languageDirective(language)}
 
             Stock: ${context.ticker} (${context.name})
             Analysis Date: ${context.analysisDate}
@@ -243,6 +255,19 @@ class ClaudeAIService {
               ? `${imageBlocks.length} uploaded broker screenshot(s) are attached after this text. Read them and incorporate any visible broker flow, accumulation/distribution, order-book, or foreign activity evidence. If the image text is unclear, say so rather than inventing details.`
               : 'No broker screenshots were uploaded.'}
 
+            BANDARMOLY (IDX API - Per-ticker broker accumulation/distribution):
+            ${bandar && !bandar.empty
+              ? `Accumulation/Distribution: ${bandar.accdist}
+               Top-5 Stance: ${bandar.top5Accdist}
+               Net Value of Top 5: Rp ${formatRpCompact(bandar.top5NetValue)}
+               Buyers vs Sellers: ${bandar.totalBuyers} / ${bandar.totalSellers}
+               Session Value: Rp ${formatRpCompact(bandar.sessionValue)}
+               Top Net Buyers: ${bandar.topBuyers.map(b => `${b.code}${b.foreign ? ' (foreign)' : ''}: Rp ${formatRpCompact(b.value)}`).join(', ')}
+               Top Net Sellers: ${bandar.topSellers.map(b => `${b.code}${b.foreign ? ' (foreign)' : ''}: Rp ${formatRpCompact(b.value)}`).join(', ')}`
+              : !bandar
+                ? 'Bandarmology data not fetched (no ticker or date).'
+                : 'No broker-summary data for this session.'}
+
             Please provide:
             1. A brief AI-enhanced summary (2-3 sentences) highlighting key insights
             2. Any additional considerations or risks not captured in the standard analysis
@@ -260,6 +285,7 @@ class ClaudeAIService {
               "actionableTip": "string",
               "brokerScreenshotRead": "string"
             }
+            The "confidence" value MUST be exactly one of: High, Medium, Low (in English), regardless of the response language. All other string values follow the RESPONSE LANGUAGE instruction above.
             `;
     const activityId = startAIActivity({
       source: 'Stock Analysis',
@@ -408,7 +434,7 @@ class ClaudeAIService {
   // If/Then scenarios, trader mental model. Distinct from the single-ticker
   // Analysis scoring above, which must stay locked. Reasons over REAL macro
   // reads + the already-screened candidates; never fabricates flow/broker data.
-  async getScreeningFramework({ macroText, candidates, mode, asOfDate }) {
+  async getScreeningFramework({ macroText, candidates, mode, asOfDate, language = 'en' }) {
     if (!this.isConfigured()) {
       throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in environment variables.');
     }
@@ -417,7 +443,7 @@ class ClaudeAIService {
       .map((c, i) => {
         const score = (c.activeComposite ?? c.composite);
         const oneM = c.oneMonth != null ? `${(c.oneMonth * 100).toFixed(1)}%` : 'n/a';
-        return `${i + 1}. ${c.ticker} (${c.name}) — ${c.capTier ?? 'cap n/a'}, close Rp ${Math.round(c.close).toLocaleString()}, 1M ${oneM}, score ${score?.toFixed?.(1) ?? '—'}/9`;
+        return `${i + 1}. ${c.ticker} (${c.name}) — ${c.capTier ?? 'cap n/a'}, close Rp ${Math.round(c.close).toLocaleString()}, 1M ${oneM}, score ${score?.toFixed?.(1) ?? '—'}/10`;
       })
       .join('\n');
 
@@ -441,7 +467,9 @@ Return STRICT JSON (no markdown fences) with exactly this shape:
   "mentalModel": [ "short discipline reminder" ],
   "picks": [ { "ticker": "CODE", "note": "one line tying this name to the macro and its structure" } ]
 }
-Provide 2-3 scenarios, 2-3 mentalModel items, and one pick per top candidate (max 3). Concise, professional, plain language for Indonesian retail swing traders.`;
+Provide 2-3 scenarios, 2-3 mentalModel items, and one pick per top candidate (max 3). Concise, professional, plain language for Indonesian retail swing traders.
+
+${languageDirective(language)} (Ticker codes stay as-is.)`;
 
     const activityId = startAIActivity({
       source: 'Stock Screening',

@@ -12,24 +12,37 @@ import {
 import { Stepper } from '../components/Stepper';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
-import { ratingFromScore, formatPct, formatRp } from '../lib/analysis';
+import { BrokerActionGauge, BrokerActionColumns } from '../components/BrokerAction';
+import { ratingFromScore, toScoreTen, formatPct, formatRp } from '../lib/analysis';
 import { screeningStage1, screeningStage2, diagnoseStock } from '../lib/screeningService';
 import { CATEGORIES, DEFAULT_CATEGORY, CAP_TIERS, getCategory } from '../lib/screeningCategories';
 import { SECTORS, searchEmiten, findEmiten } from '../lib/universe';
 import { conglomerateGroup } from '../data/conglomerates';
 import { fetchMacro, summarizeMacro } from '../lib/macro';
 import { claudeAIService } from '../lib/claudeAI';
+import { useLang, useT } from '../lib/i18n';
 
 const SAVED_KEY = 'idx-screenings';
 const TODAY = new Date().toISOString().slice(0, 10);
 const COUNT_OPTIONS = [3, 5, 10, 15];
 
-// Stepper labels for screening flow
-const STEP_LABELS = ['Select Date', 'Run Screening', 'Refine with Brokers'];
-
 // Constants needed for framework display (removed from old screening logic)
 const EQUITY_INDEX = new Set(['ihsg', 'sp500', 'nasdaq', 'nikkei', 'hangseng']);
 const fmtSignedPct = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(2)}%`);
+
+// Bandarmology accumulation/distribution → pill tone. Accumulation reads
+// positive (green), distribution negative (red), anything else cautionary.
+// The IDX API returns several label forms — short ("Acc"/"Dist") and full
+// ("Akumulasi"/"Distribusi", "Accumulation"/"Distribution") — so match the
+// shortest distinguishing stem of each: "acc" / "akum" cover every accumulation
+// spelling (note "akumulasi" has no double-c), "dist" covers every distribution
+// spelling. "neutral"/"netral" falls through to warn, which is the intent.
+const accTone = (label) => {
+  const v = (label || '').toLowerCase();
+  if (v.includes('akum') || v.includes('acc')) return 'pos';
+  if (v.includes('dist')) return 'neg';
+  return 'warn';
+};
 
 // Concise controlling owner for a conglomerate-group ticker (parenthetical
 // detail stripped), or null. Shown on the candidate list for the Conglomerate
@@ -40,12 +53,68 @@ function conglomerateOwner(ticker) {
   return grp.controller.replace(/\s*\(.*\)\s*$/, '');
 }
 
+// Inline broker-summary panel rendered when a candidate's Acc/Dist pill is
+// expanded. Reads the bandarmology already attached to the candidate (no fetch).
+// Speaks the report vocabulary: a verdict header (serif phrase + tonal pill +
+// net value in tabular figures), the restyled gauge, paired buy/sell columns,
+// and the two session stats as dotted-leader Rows. The className prop lets the
+// table-based expansion span its column via colSpan.
+function BandarSummary({ bandar, className = '' }) {
+  const t = useT();
+  if (!bandar) return null;
 
-// Compact "why isn't this on the list?" search — a smaller sibling of the
+  const verdict = bandar.accdist || bandar.top5Accdist;
+  // Reuse the shared accTone so accumulation/distribution tint consistently
+  // across the row pill and this summary (Indonesian labels included).
+  const tone = accTone(verdict);
+  const netValue = bandar.top5NetValue;
+
+  return (
+    <div className={`list-item-enter px-1 ${className}`}>
+      {/* Verdict header — the label appears once here as the serif headline.
+          The row's pill already carries it collapsed and the Top-5 stance Row
+          repeats the secondary read below, so we don't echo a second pill. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className={`font-serif text-lg font-medium ${tone === 'pos' ? 'text-pos' : tone === 'neg' ? 'text-neg' : 'text-ink'}`}>
+          {verdict || t('Broker action', 'Aksi broker')}
+        </span>
+        <span className="font-mono text-xs tabular-nums text-ink-muted">
+          {netValue != null
+            ? `${netValue >= 0 ? '+' : ''}${formatRp(netValue)}`
+            : '—'}
+          <span className="ml-1.5 text-ink-muted/80">{t('top-5 net', 'net 5 teratas')}</span>
+        </span>
+      </div>
+
+      <div className="mt-4 border-t border-line pt-4">
+        <BrokerActionGauge bandar={bandar} t={t} />
+      </div>
+
+      <div className="mt-4">
+        <BrokerActionColumns bandar={bandar} t={t} maxRows={5} />
+      </div>
+
+      {/* Session stats as dotted-leader Rows — the report's typographic spine. */}
+      <div className="mt-4 border-t border-line pt-2">
+        <Row
+          label={t('Top-5 stance', 'Sifat 5 teratas')}
+          value={bandar.top5Accdist || '—'}
+        />
+        <Row
+          label={t('Buyers / sellers', 'Pembeli / penjual')}
+          value={`${bandar.totalBuyers ?? 0} / ${bandar.totalSellers ?? 0}`}
+        />
+      </div>
+    </div>
+  );
+}
+
+
 // Compact "why isn't this on the list?" search — a smaller sibling of the
 // Stock Analysis search. Runs the active screen's gates against one ticker
 // (via diagnoseStock) and shows a per-criterion pass/fail breakdown.
 function WhyNotRecommended({ date, filters, results }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [active, setActive] = useState(-1);
@@ -80,7 +149,7 @@ function WhyNotRecommended({ date, filters, results }) {
       const res = await diagnoseStock(known.code, date, filters, results);
       setDiag(res);
     } catch (e) {
-      setErr(e.message || 'Could not diagnose that stock.');
+      setErr(e.message || t('Could not diagnose that stock.', 'Tidak dapat mendiagnosis saham tersebut.'));
     } finally {
       setLoading(false);
     }
@@ -108,9 +177,12 @@ function WhyNotRecommended({ date, filters, results }) {
 
   return (
     <section className="mt-8 border-t border-line pt-6">
-      <h3 className="font-serif text-xl font-medium">Why isn’t this stock recommended?</h3>
+      <h3 className="font-serif text-xl font-medium">{t('Why isn’t this stock recommended?', 'Mengapa saham ini tidak direkomendasikan?')}</h3>
       <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
-        Search any IDX ticker to see exactly which {categoryLabel} criteria it passes or fails for this screen.
+        {t(
+          `Search any IDX ticker to see exactly which ${categoryLabel} criteria it passes or fails for this screen.`,
+          `Cari kode saham IDX mana pun untuk melihat kriteria ${categoryLabel} mana yang lolos atau gagal pada penyaringan ini.`,
+        )}
       </p>
 
       <div className="relative mt-4 max-w-md text-left">
@@ -125,7 +197,7 @@ function WhyNotRecommended({ date, filters, results }) {
           value={query}
           onChange={onChange}
           onKeyDown={onKeyDown}
-          placeholder="Check a ticker — e.g. “ASII”"
+          placeholder={t('Check a ticker — e.g. “ASII”', 'Periksa kode saham — mis. “ASII”')}
           role="combobox"
           aria-expanded={suggestions.length > 0}
           aria-autocomplete="list"
@@ -134,7 +206,7 @@ function WhyNotRecommended({ date, filters, results }) {
         {suggestions.length > 0 && (
           <ul
             role="listbox"
-            className="dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-paper py-1.5 shadow-xl shadow-ink/10"
+            className="dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5 shadow-xl shadow-ink/10"
           >
             {suggestions.map((s, index) => (
               <li key={s.code} role="option" aria-selected={index === active}>
@@ -163,7 +235,7 @@ function WhyNotRecommended({ date, filters, results }) {
             <span />
             <span />
           </span>
-          <span className="font-mono text-xs text-ink-muted">Checking {query} against the screen…</span>
+          <span className="font-mono text-xs text-ink-muted">{t(`Checking ${query} against the screen…`, `Memeriksa ${query} terhadap penyaringan…`)}</span>
         </div>
       )}
       {err && !loading && <p className="mt-4 text-sm text-neg">{err}</p>}
@@ -173,7 +245,11 @@ function WhyNotRecommended({ date, filters, results }) {
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-sm font-semibold text-ink">{diag.ticker}</p>
             <Pill tone={tone}>
-              {diag.recommended ? 'On the list' : diag.qualifies ? 'Qualifies, not surfaced' : 'Excluded'}
+              {diag.recommended
+                ? t('On the list', 'Masuk daftar')
+                : diag.qualifies
+                  ? t('Qualifies, not surfaced', 'Memenuhi syarat, tidak ditampilkan')
+                  : t('Excluded', 'Dikecualikan')}
             </Pill>
           </div>
           {diag.name && <p className="mt-0.5 text-xs text-ink-muted">{diag.name}</p>}
@@ -200,6 +276,15 @@ function WhyNotRecommended({ date, filters, results }) {
 }
 
 export default function StockScreeningPage() {
+  const t = useT();
+  const { lang } = useLang();
+  // Stepper labels for screening flow
+  const STEP_LABELS = [
+    t('Select Date', 'Pilih Tanggal'),
+    t('Run Screening', 'Jalankan Penyaringan'),
+    t('Refine with Brokers', 'Sempurnakan dengan Broker'),
+  ];
+
   // Flow: idle → (date modal) → loading → results → (upload modal) → re-ranked results
   const [dateModalOpen, setDateModalOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -229,6 +314,10 @@ export default function StockScreeningPage() {
   const [initialScreenings, setInitialScreenings] = useState([]);
   // AI usage tracking
   const [aiUsed, setAiUsed] = useState(false);
+  // Inline broker-summary expansion: which candidate row is expanded. Toggling
+  // the same ticker collapses it. Data comes straight from the already-loaded
+  // bandarmology on each candidate — no extra fetch.
+  const [expandedBandarTicker, setExpandedBandarTicker] = useState(null);
 
   // Framework JAUHI AI — real macro context + AI top-down narrative
   const [macro, setMacro] = useState(null);
@@ -282,14 +371,15 @@ export default function StockScreeningPage() {
             candidates: list.slice(0, 5),
             mode: analysisMode,
             asOfDate: date || asOfDate,
+            language: lang,
           });
           setFramework(fw);
         } catch (e) {
-          setFrameworkError(e.message || 'AI narrative unavailable.');
+          setFrameworkError(e.message || t('AI narrative unavailable.', 'Narasi AI tidak tersedia.'));
         }
       }
     } catch (e) {
-      setFrameworkError(e.message || 'Macro data unavailable.');
+      setFrameworkError(e.message || t('Macro data unavailable.', 'Data makro tidak tersedia.'));
     } finally {
       setFrameworkLoading(false);
     }
@@ -299,7 +389,12 @@ export default function StockScreeningPage() {
     if (loading) return;
     // Mid-day mode needs the Session-1 foreign-activity screenshot first.
     if (analysisMode === 'midday' && brokerScreenshots.length === 0) {
-      setError('Mid‑day screening needs a Session‑1 foreign-activity screenshot — add it via “Attach broker screenshots” first.');
+      setError(
+        t(
+          'Mid‑day screening needs a Session‑1 foreign-activity screenshot — add it via “Attach broker screenshots” first.',
+          'Penyaringan mid‑day memerlukan tangkapan layar aktivitas asing Sesi‑1 — tambahkan dulu lewat “Lampirkan tangkapan layar broker”.',
+        ),
+      );
       return;
     }
     setLoading(true);
@@ -316,7 +411,7 @@ export default function StockScreeningPage() {
 
     try {
       // Stage 1: scan the live IDX universe + score (JAUHI enforced in code).
-      setError('Scanning the IDX universe and applying JAUHI screening...');
+      setError(t('Scanning the IDX universe and applying JAUHI screening...', 'Memindai semesta IDX dan menerapkan penyaringan JAUHI...'));
       const stage1Result = await screeningStage1(date, numStocks, {
         category,
         capTier,
@@ -328,7 +423,12 @@ export default function StockScreeningPage() {
       setAiUsed(!!stage1Result.aiReview);
 
       if (!stage1Result || stage1Result.candidates.length === 0) {
-        setError('No candidates passed JAUHI restrictions. Try a different date or adjust filters.');
+        setError(
+          t(
+            'No candidates passed JAUHI restrictions. Try a different date or adjust filters.',
+            'Tidak ada kandidat yang lolos batasan JAUHI. Coba tanggal lain atau sesuaikan filter.',
+          ),
+        );
         setLoading(false);
         return;
       }
@@ -347,7 +447,12 @@ export default function StockScreeningPage() {
       }
 
       // Mid-day mode: proceed directly to Stage 2 with broker screenshots
-      setError('Analyzing broker screenshots and detecting pack hunting patterns...');
+      setError(
+        t(
+          'Analyzing broker screenshots and detecting pack hunting patterns...',
+          'Menganalisis tangkapan layar broker dan mendeteksi pola perburuan kawanan...',
+        ),
+      );
       const stage2Params = {
         date: date,
         candidates: stage1Result.candidates,
@@ -371,14 +476,18 @@ export default function StockScreeningPage() {
             oneMonth: base.oneMonth ?? null,
             capTier: base.capTier ?? null,
             board: base.board ?? null,
-            activeComposite: item.finalScore,
-            overallRating: ratingFromScore(item.finalScore),
+            // finalScore is 0-100 (the AI judge's scale); rescale it onto the same
+            // public 1-10 score the deterministic engine uses, so the screening
+            // table reads consistently whether or not broker screenshots were used.
+            activeComposite: toScoreTen(item.finalScore, 0, 100),
+            overallRating: ratingFromScore(toScoreTen(item.finalScore, 0, 100)),
             scores: {
               shortTerm: item.baseScore / 100, // Normalize to 0-1 range
               midTerm: item.baseScore / 100,
               longTerm: item.baseScore / 100
             },
-            marketCap: base.marketCap ?? 0
+            marketCap: base.marketCap ?? 0,
+            bandarmology: base.bandarmology ?? null
           };
         });
 
@@ -388,14 +497,13 @@ export default function StockScreeningPage() {
         // Store raw analysis for potential display
         // Note: In a full implementation, we might want to display this raw analysis
       } else {
-        setError('Failed to get screening results from AI analysis.');
+        setError(t('Failed to get screening results from AI analysis.', 'Gagal mendapatkan hasil penyaringan dari analisis AI.'));
         setLoading(false);
       }
 
       generateFramework(stage1Result.candidates, date);
     } catch (err) {
-      console.error('Error in runScreening:', err);
-      setError(err.message || 'An unexpected error occurred during screening.');
+      setError(err.message || t('An unexpected error occurred during screening.', 'Terjadi kesalahan tak terduga selama penyaringan.'));
       setLoading(false);
     }
   };
@@ -404,6 +512,12 @@ export default function StockScreeningPage() {
     setAsOfDate(value);
     setDateModalOpen(false);
     runScreening(value);
+  };
+
+  // Toggle inline broker-summary expansion for a candidate row. The bandarmology
+  // data is already attached to the candidate, so this is pure state flip.
+  const toggleBandarExpand = (ticker) => {
+    setExpandedBandarTicker((prev) => (prev === ticker ? null : ticker));
   };
 
   const addBrokerScreenshots = (incoming) => {
@@ -445,20 +559,24 @@ export default function StockScreeningPage() {
           const base = byTicker.get(item.ticker) ?? {};
           return {
             ticker: item.ticker,
-            name: base.name ?? item.ticker,
+            name: base.name ?? item.ticket,
             rank: item.ranking,
             close: base.close ?? 0,
             oneMonth: base.oneMonth ?? null,
             capTier: base.capTier ?? null,
             board: base.board ?? null,
-            activeComposite: item.finalScore,
-            overallRating: ratingFromScore(item.finalScore),
+            // finalScore is 0-100 (the AI judge's scale); rescale it onto the same
+            // public 1-10 score the deterministic engine uses, so the screening
+            // table reads consistently whether or not broker screenshots were used.
+            activeComposite: toScoreTen(item.finalScore, 0, 100),
+            overallRating: ratingFromScore(toScoreTen(item.finalScore, 0, 100)),
             scores: {
               shortTerm: item.baseScore / 100, // Normalize to 0-1 range
               midTerm: item.baseScore / 100,
               longTerm: item.baseScore / 100
             },
-            marketCap: base.marketCap ?? 0
+            marketCap: base.marketCap ?? 0,
+            bandarmology: base.bandarmology ?? null
           };
         });
 
@@ -469,11 +587,10 @@ export default function StockScreeningPage() {
         setRerankSuccess(true);
         setTimeout(() => setRerankSuccess(false), 1500);
       } else {
-        setError('Failed to get screening results from AI analysis.');
+        setError(t('Failed to get screening results from AI analysis.', 'Gagal mendapatkan hasil penyaringan dari analisis AI.'));
       }
     } catch (err) {
-      console.error('Error in rerankWithBrokers:', err);
-      setError(err.message || 'An unexpected error occurred during re-ranking.');
+      setError(err.message || t('An unexpected error occurred during re-ranking.', 'Terjadi kesalahan tak terduga selama pemeringkatan ulang.'));
     } finally {
       setLoading(false);
     }
@@ -491,7 +608,7 @@ export default function StockScreeningPage() {
 
   const handleSaveScreening = () => {
     if (!hasResults) return;
-    const name = screeningName.trim() || `Screening ${asOfDate || TODAY}`;
+    const name = screeningName.trim() || `${t('Screening', 'Penyaringan')} ${asOfDate || TODAY}`;
     const entry = {
       name,
       date: asOfDate || TODAY,
@@ -548,8 +665,8 @@ export default function StockScreeningPage() {
     <section className="mt-8 border-t border-line pt-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">JAUHI AI analyzed</p>
-          <h3 className="font-serif text-xl font-medium">Market framework · top-down read</h3>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('JAUHI AI analyzed', 'Dianalisis JAUHI AI')}</p>
+          <h3 className="font-serif text-xl font-medium">{t('Market framework · top-down read', 'Kerangka pasar · pembacaan top-down')}</h3>
         </div>
         {macro && (
           <Pill tone={macro.bias === 'Bullish' ? 'pos' : macro.bias === 'Bearish' ? 'neg' : 'warn'}>
@@ -583,7 +700,8 @@ export default function StockScreeningPage() {
               })}
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            {macro.reasons.length ? macro.reasons.join(' · ') : 'Flat tape.'} — from live IHSG, FX & global indices.
+            {macro.reasons.length ? macro.reasons.join(' · ') : t('Flat tape.', 'Pasar datar.')}{' '}
+            {t('— from live IHSG, FX & global indices.', '— dari IHSG, FX & indeks global secara langsung.')}
           </p>
         </>
       )}
@@ -595,12 +713,15 @@ export default function StockScreeningPage() {
             <span />
             <span />
           </span>
-          <span className="font-mono text-xs text-ink-muted">JAUHI AI is analyzing...</span>
+          <span className="font-mono text-xs text-ink-muted">{t('JAUHI AI is analyzing...', 'JAUHI AI sedang menganalisis...')}</span>
         </div>
       )}
       {frameworkError && !frameworkLoading && (
         <p className="mt-3 text-xs text-ink-muted">
-          Macro shown above; AI narrative unavailable ({frameworkError})
+          {t(
+            `Macro shown above; AI narrative unavailable (${frameworkError})`,
+            `Makro ditampilkan di atas; narasi AI tidak tersedia (${frameworkError})`,
+          )}
         </p>
       )}
 
@@ -608,24 +729,24 @@ export default function StockScreeningPage() {
         <div className="mt-6 border-t border-line pt-5">
           <div className="mb-4 flex flex-wrap items-baseline gap-3">
             <p className="text-base font-semibold text-ink">
-              JAUHI AI analysis result
+              {t('JAUHI AI analysis result', 'Hasil analisis JAUHI AI')}
             </p>
-            <Pill tone="pos">Complete</Pill>
+            <Pill tone="pos">{t('Complete', 'Selesai')}</Pill>
           </div>
           <div className="max-w-prose space-y-5">
           {framework.topDown && <p className="text-sm leading-relaxed text-ink">{framework.topDown}</p>}
           {Array.isArray(framework.scenarios) && framework.scenarios.length > 0 && (
             <div>
-              <p className="text-sm font-medium">If / then</p>
+              <p className="text-sm font-medium">{t('If / then', 'Jika / maka')}</p>
               <ul className="mt-2 divide-y divide-line">
                 {framework.scenarios.map((s, i) => (
                   <li
                     key={i}
                     className="grid grid-cols-[2.25rem_1fr] items-baseline gap-x-3 gap-y-1 py-3 text-sm leading-relaxed first:pt-1 last:pb-0"
                   >
-                    <span className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">If</span>
+                    <span className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('If', 'Jika')}</span>
                     <span className="text-ink">{s.if}</span>
-                    <span className="font-mono text-[11px] uppercase tracking-wide text-brand">Then</span>
+                    <span className="font-mono text-[11px] uppercase tracking-wide text-brand-strong">{t('Then', 'Maka')}</span>
                     <span className="text-ink-muted">{s.then}</span>
                   </li>
                 ))}
@@ -634,7 +755,7 @@ export default function StockScreeningPage() {
           )}
           {Array.isArray(framework.mentalModel) && framework.mentalModel.length > 0 && (
             <div>
-              <p className="text-sm font-medium">Trader mental model</p>
+              <p className="text-sm font-medium">{t('Trader mental model', 'Model berpikir trader')}</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-muted">
                 {framework.mentalModel.map((m, i) => (
                   <li key={i}>{m}</li>
@@ -644,7 +765,7 @@ export default function StockScreeningPage() {
           )}
           {Array.isArray(framework.picks) && framework.picks.length > 0 && (
             <div>
-              <p className="text-sm font-medium">On the picks</p>
+              <p className="text-sm font-medium">{t('On the picks', 'Tentang pilihan')}</p>
               <ul className="mt-2 space-y-2">
                 {framework.picks.map((p, i) => (
                   <li key={i} className="text-sm leading-relaxed">
@@ -665,47 +786,50 @@ export default function StockScreeningPage() {
     <div className="flex flex-col">
       {/* ===== Stepper and main content ===== */}
       {(!loading && !error) && (
-        <div className="py-6">
+        <div className="py-2 sm:py-6">
           <Stepper steps={STEP_LABELS} current={stepperCurrent} />
 
           {/* Stage 1: Select Date */}
           {stage === 'date' && (
-            <section className="stage-enter mx-auto mt-16 max-w-xl text-center">
+            <section className="stage-enter mx-auto mt-10 max-w-xl text-center sm:mt-16">
               <h3 className="font-serif text-4xl font-medium tracking-tight sm:text-5xl">
-                Find today's candidates
+                {t("Find today's candidates", 'Temukan kandidat hari ini')}
               </h3>
               <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
-                Scan the IDX universe for the top {numStocks} names, then refine them with broker summaries.
+                {t(
+                  `Scan the IDX universe for the top ${numStocks} names, then refine them with broker summaries.`,
+                  `Pindai semesta IDX untuk ${numStocks} nama teratas, lalu sempurnakan dengan ringkasan broker.`,
+                )}
               </p>
 
               <button
                 type="button"
                 onClick={() => setDateModalOpen(true)}
-                className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-brand px-8 py-4 text-base font-medium text-white shadow-lg shadow-brand/20 transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:shadow-xl hover:shadow-brand/25 hover:scale-[1.02] active:scale-[0.95]"
+                className="mt-7 inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-brand px-8 text-base font-medium text-on-brand shadow-lg shadow-brand/20 transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:shadow-xl hover:shadow-brand/25 hover:scale-[1.02] active:scale-[0.95] sm:mt-8"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
                 </svg>
-                Run Screening
+                {t('Run Screening', 'Jalankan Penyaringan')}
               </button>
 
               {/* Filters sit below the CTA, behind one button, so the hero stays
                   uncluttered. The panel holds strategy + every refinement.
                   Block-level (not inline) so it drops to its own line under the
                   CTA; the button centers via the section's text-center. */}
-              <div className="relative mt-5">
+              <div className="relative mt-4 sm:mt-5">
                 <button
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   aria-expanded={filtersOpen}
-                  className="inline-flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
                   </svg>
-                  Filters
+                  {t('Filters', 'Filter')}
                   {activeFilterCount > 0 && (
-                    <span className="rounded-full bg-brand-tint px-1.5 text-xs font-semibold text-brand">
+                    <span className="rounded-full bg-brand-tint px-1.5 text-xs font-semibold text-brand-strong">
                       {activeFilterCount}
                     </span>
                   )}
@@ -715,10 +839,10 @@ export default function StockScreeningPage() {
                   <>
                     {/* click-away */}
                     <div className="fixed inset-0 z-dropdown" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                    <div className="dropdown-enter absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-paper p-5 text-left shadow-xl shadow-ink/10">
+                    <div className="dropdown-enter absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-elevated p-5 text-left shadow-xl shadow-ink/10">
                       <div className="space-y-4">
                         <div className="space-y-1.5">
-                          <FieldLabel htmlFor="category-filter">Strategy</FieldLabel>
+                          <FieldLabel htmlFor="category-filter">{t('Strategy', 'Strategi')}</FieldLabel>
                           <select
                             id="category-filter"
                             value={category}
@@ -728,19 +852,21 @@ export default function StockScreeningPage() {
                             {CATEGORIES.map((c) => (
                               <option key={c.id} value={c.id}>
                                 {c.label}
-                                {c.id === DEFAULT_CATEGORY ? ' (default)' : ''}
+                                {c.id === DEFAULT_CATEGORY ? t(' (default)', ' (bawaan)') : ''}
                               </option>
                             ))}
                           </select>
                           <p className="text-xs leading-relaxed text-ink-muted">
                             {activeCategory.blurb}
-                            {activeCategory.fundamentals ? ' Deeper fundamental scan — takes a little longer.' : ''}
+                            {activeCategory.fundamentals
+                              ? t(' Deeper fundamental scan — takes a little longer.', ' Pemindaian fundamental lebih dalam — sedikit lebih lama.')
+                              : ''}
                           </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <FieldLabel>Stocks to surface</FieldLabel>
+                            <FieldLabel>{t('Stocks to surface', 'Jumlah saham')}</FieldLabel>
                             <div className="inline-flex rounded-lg border border-line p-1">
                               {COUNT_OPTIONS.map((n) => (
                                 <button
@@ -748,7 +874,7 @@ export default function StockScreeningPage() {
                                   type="button"
                                   onClick={() => setNumStocks(n)}
                                   className={`rounded-md px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
-                                    numStocks === n ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                    numStocks === n ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
                                   } hover:scale-[1.02] active:scale-[0.95]`}
                                 >
                                   {n}
@@ -758,18 +884,18 @@ export default function StockScreeningPage() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <FieldLabel>Analysis mode</FieldLabel>
+                            <FieldLabel>{t('Analysis mode', 'Mode analisis')}</FieldLabel>
                             <div className="inline-flex rounded-lg border border-line p-1">
                               {[
-                                { value: 'closing', label: 'EOD close' },
-                                { value: 'midday', label: 'Midday' },
+                                { value: 'closing', label: t('EOD close', 'Tutup EOD') },
+                                { value: 'midday', label: t('Midday', 'Tengah hari') },
                               ].map((m) => (
                                 <button
                                   key={m.value}
                                   type="button"
                                   onClick={() => setAnalysisMode(m.value)}
                                   className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
-                                    analysisMode === m.value ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                    analysisMode === m.value ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
                                   } hover:scale-[1.02] active:scale-[0.95]`}
                                 >
                                   {m.label}
@@ -780,18 +906,18 @@ export default function StockScreeningPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <FieldLabel>Market cap</FieldLabel>
+                          <FieldLabel>{t('Market cap', 'Kapitalisasi pasar')}</FieldLabel>
                           <div className="flex flex-wrap gap-1 rounded-lg border border-line p-1">
-                            {CAP_TIERS.map((t) => (
+                            {CAP_TIERS.map((tier) => (
                               <button
-                                key={t.id}
+                                key={tier.id}
                                 type="button"
-                                onClick={() => setCapTier(t.id)}
+                                onClick={() => setCapTier(tier.id)}
                                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                                  capTier === t.id ? 'bg-brand text-white' : 'text-ink-muted hover:text-ink'
+                                  capTier === tier.id ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
                                 } hover:scale-[1.02] active:scale-[0.95]`}
                               >
-                                {t.label}
+                                {tier.label}
                               </button>
                             ))}
                           </div>
@@ -799,14 +925,14 @@ export default function StockScreeningPage() {
 
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <FieldLabel htmlFor="sector-filter">Sector</FieldLabel>
+                            <FieldLabel htmlFor="sector-filter">{t('Sector', 'Sektor')}</FieldLabel>
                             <select
                               id="sector-filter"
                               value={sector}
                               onChange={(e) => setSector(e.target.value)}
                               className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
                             >
-                              <option value="">All sectors</option>
+                              <option value="">{t('All sectors', 'Semua sektor')}</option>
                               {SECTORS.map((s) => (
                                 <option key={s} value={s}>
                                   {s}
@@ -816,19 +942,19 @@ export default function StockScreeningPage() {
                           </div>
 
                           <div className="space-y-1.5">
-                            <FieldLabel htmlFor="board-risk-filter">Listing board</FieldLabel>
+                            <FieldLabel htmlFor="board-risk-filter">{t('Listing board', 'Papan pencatatan')}</FieldLabel>
                             <select
                               id="board-risk-filter"
                               value={boardRiskFilter}
                               onChange={(e) => setBoardRiskFilter(e.target.value)}
-                              title="Optional — restricts the scan to a single IDX listing board."
+                              title={t('Optional — restricts the scan to a single IDX listing board.', 'Opsional — membatasi pemindaian ke satu papan pencatatan IDX.')}
                               className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
                             >
-                              <option value="">Any board</option>
-                              <option value="high">Special Monitoring</option>
-                              <option value="elevated">Acceleration</option>
-                              <option value="moderate">Development / New Economy</option>
-                              <option value="normal">Main board</option>
+                              <option value="">{t('Any board', 'Semua papan')}</option>
+                              <option value="high">{t('Special Monitoring', 'Pemantauan Khusus')}</option>
+                              <option value="elevated">{t('Acceleration', 'Akselerasi')}</option>
+                              <option value="moderate">{t('Development / New Economy', 'Pengembangan / Ekonomi Baru')}</option>
+                              <option value="normal">{t('Main board', 'Papan utama')}</option>
                             </select>
                           </div>
                         </div>
@@ -840,13 +966,13 @@ export default function StockScreeningPage() {
 
                 {savedScreenings.length > 0 && (
                   <div className="mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
-                    <p className="text-sm font-medium">Saved screenings</p>
+                    <p className="text-sm font-medium">{t('Saved screenings', 'Penyaringan tersimpan')}</p>
                     <ul className="mt-3 space-y-2">
                       {savedScreenings.slice(0, 5).map((s) => (
                         <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
                           <span className="font-medium">{s.name}</span>
                           <span className="font-mono text-xs text-ink-muted">
-                            {s.date} · {s.results.length} stocks
+                            {s.date} · {t(`${s.results.length} stocks`, `${s.results.length} saham`)}
                           </span>
                         </li>
                       ))}
@@ -856,269 +982,7 @@ export default function StockScreeningPage() {
               </section>
           )}
 
-          {/* Stage 2: Run Screening */}
-          {stage === 'screening' && (
-            <>
-              {awaitingBrokerUpload && (
-                <article className="report-enter pt-8">
-                  <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
-                    <div>
-                      <p className="font-mono text-xs text-ink-muted">
-                        Closing screen{asOfDate ? ` · as of ${asOfDate}` : ''} · {initialScreenings.length} candidate
-                        {initialScreenings.length === 1 ? '' : 's'}
-                      </p>
-                      <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">Candidates ready</h2>
-                      <p className="mt-2 max-w-prose text-sm text-ink-muted">
-                        Optionally attach broker-summary screenshots, then re-rank to apply pack-hunting
-                        detection — or skip straight to the final ranking.
-                      </p>
-                    </div>
-                    <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
-                  </header>
-
-                  <ul className="mt-6 divide-y divide-line">
-                    {initialScreenings.map((s, i) => {
-                      const owner = category === 'conglomerate' ? conglomerateOwner(s.ticker) : null;
-                      return (
-                      <li key={s.ticker} className="flex items-baseline gap-3 py-2.5">
-                        <span className="w-5 shrink-0 font-mono text-sm tabular-nums text-ink-muted">{i + 1}</span>
-                        <span className="font-mono text-sm font-semibold text-ink">{s.ticker}</span>
-                        <span className="flex-1 min-w-0 text-xs text-ink-muted">
-                          <span className="block truncate">
-                            {s.name}
-                            {s.capTier ? ` · ${s.capTier}` : ''}
-                          </span>
-                          {owner && (
-                            <span className="mt-1 block" title={`Controlling owner — ${owner}`}>
-                              <Pill tone="muted">{owner}</Pill>
-                            </span>
-                          )}
-                        </span>
-                        {s.composite != null && (
-                          <span
-                            className="font-mono text-sm tabular-nums text-ink-muted"
-                            title="Initial ranking score"
-                          >
-                            {s.composite.toFixed(1)}
-                          </span>
-                        )}
-                        {s.overallRating && <RatingFigure rating={s.overallRating} className="text-sm" />}
-                        <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
-                      </li>
-                      );
-                    })}
-                  </ul>
-
-                  <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-5">
-                    <PrimaryButton onClick={handleRefineAction}>
-                      {brokerScreenshots.length > 0 ? 'Re-rank candidates' : 'Get final ranking'}
-                    </PrimaryButton>
-                    <QuietButton onClick={() => setUploadOpen(true)}>
-                      {brokerScreenshots.length > 0
-                        ? `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached · add more`
-                        : 'Attach broker screenshots'}
-                    </QuietButton>
-                  </div>
-
-                  <WhyNotRecommended
-                    date={asOfDate}
-                    filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
-                    results={initialScreenings}
-                  />
-
-                  {frameworkSection}
-                </article>
-              )}
-
-              {/* Midday mode results or loading state */}
-              {!awaitingBrokerUpload && hasResults && !loading && (
-                <article className="report-enter pt-8">
-                  <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
-                    <div>
-                      <p className="font-mono text-xs text-ink-muted">
-                        Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}{aiUsed && ' · AI-enhanced'}
-                      </p>
-                      <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">
-                        Top {screenings.length} candidate{screenings.length === 1 ? '' : 's'}
-                      </h2>
-                      <p className="mt-2 text-sm text-ink-muted">
-                        {reranked
-                          ? 'Re-ranked with broker summaries — weighted toward near-term flow.'
-                          : `${activeCategory.label} — ${activeCategory.blurb}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {reranked && <Pill tone="brand">Refined</Pill>}
-                      {aiUsed && <Pill tone="pos">AI-enhanced</Pill>}
-                      <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
-                    </div>
-                  </header>
-
-                  {/* Ranked table */}
-                  <div className="mt-6 overflow-x-auto">
-                    <table className="w-full table-fixed">
-                      <colgroup>
-                        <col className="w-10" />
-                        <col />
-                        <col className="w-28" />
-                        <col className="w-20" />
-                        <col className="w-16" />
-                        <col className="w-16" />
-                      </colgroup>
-                      <thead>
-                        <tr className="border-y border-line text-xs font-medium text-ink-muted">
-                          <th className="py-2.5 pl-1 pr-2 text-left">#</th>
-                          <th className="py-2.5 px-2 text-left">Stock</th>
-                          <th className="py-2.5 px-2 text-right">Price</th>
-                          <th className="py-2.5 px-2 text-right">1M</th>
-                          <th className="py-2.5 px-2 text-right">Score</th>
-                          <th className="py-2.5 pl-2 pr-1 text-right">Rating</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line">
-                        {screenings.map((result, index) => (
-                          <tr
-                            key={result.ticker}
-                            className={`align-top transition-colors duration-150 hover:bg-well/60 result-row-enter result-row-enter-delay-${Math.min(index, 9)}`}
-                          >
-                            <td className="py-3.5 pl-1 pr-2 font-mono text-sm tabular-nums text-ink-muted">
-                              {result.rank}
-                            </td>
-                            <td className="py-3.5 px-2">
-                              <div className="flex items-baseline gap-2">
-                                <span className="font-mono text-sm font-semibold text-ink">{result.ticker}</span>
-                                {result.board === 'Pemantauan Khusus' && (
-                                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">
-                                    monitored
-                                  </span>
-                                )}
-                              </div>
-                              <p className="mt-0.5 truncate text-xs text-ink-muted" title={result.name}>
-                                {result.name}
-                                {result.capTier && <span> · {result.capTier}</span>}
-                              </p>
-                            </td>
-                            <td className="py-3.5 px-2 text-right font-mono text-sm tabular-nums">
-                              {formatRp(result.close)}
-                            </td>
-                            <td className="py-3.5 px-2 text-right font-mono text-sm tabular-nums">
-                              {result.oneMonth != null ? (
-                                <span
-                                  className={
-                                    result.oneMonth > 0
-                                      ? 'text-pos'
-                                      : result.oneMonth < 0
-                                        ? 'text-neg'
-                                        : undefined
-                                  }
-                                >
-                                  {formatPct(result.oneMonth)}
-                                </span>
-                              ) : (
-                                <span className="text-ink-muted">—</span>
-                              )}
-                            </td>
-                            <td className="py-3.5 px-2 text-right font-mono text-sm tabular-nums">
-                              {result.activeComposite.toFixed(1)}
-                            </td>
-                            <td className="py-3.5 pl-2 pr-1 text-right">
-                              <RatingFigure rating={ratingFor(result)} className="text-base" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Refine step — attach broker summaries to re-rank */}
-                  <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line p-5">
-                    <div className="max-w-prose">
-                      <p className="text-sm font-medium">
-                        {reranked ? 'Broker summaries applied' : 'Refine with broker summaries'}
-                      </p>
-                      <p className="mt-1 text-sm text-ink-muted">
-                        {brokerScreenshots.length > 0
-                          ? `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached. Re-ranking weights the near-term flow these confirm.`
-                          : 'Attach broker-summary screenshots for any of the names above, then re-rank toward near-term flow.'}
-                      </p>
-                    </div>
-                    <PrimaryButton onClick={handleRefineAction}>
-                      {brokerScreenshots.length > 0 ? 'Review & re-rank' : 'Attach broker screenshots'}
-                    </PrimaryButton>
-                  </div>
-
-                  {/* Save */}
-                  <div className="mt-6 flex flex-wrap items-end justify-between gap-4 border-t border-line pt-6">
-                    <div className="min-w-64 flex-1">
-                      <FieldLabel htmlFor="screening-name">Save this list as</FieldLabel>
-                      <input
-                        id="screening-name"
-                        type="text"
-                        value={screeningName}
-                        onChange={(e) => setScreeningName(e.target.value)}
-                        placeholder="e.g. 'Momentum leaders'"
-                        className="w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
-                      />
-                    </div>
-                    <PrimaryButton onClick={handleSaveScreening}>Save list</PrimaryButton>
-                    {saveSuccess && (
-                      <span className="ml-3 h-4 w-4">
-                        <svg className="h-4 w-4 success-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-                  {savedAs && (
-                    <p className="mt-3 text-sm text-pos">
-                      Saved as "{savedAs}" — it will appear under saved screenings on the start screen.
-                    </p>
-                  )}
-
-                  <WhyNotRecommended
-                    date={asOfDate}
-                    filters={{ category, capTier, sector, boardLevel: boardRiskFilter }}
-                    results={screenings}
-                  />
-
-                  {frameworkSection}
-                </article>
-              )}
-
-              {/* Loading state */}
-              {!awaitingBrokerUpload && loading && (
-                <div className="py-10">
-                  <p className="text-center font-mono text-xs text-ink-muted">
-                    Ranking candidates on live market data{asOfDate ? ` · as of ${asOfDate}` : ''}…
-                  </p>
-                  <ReportSkeleton />
-                </div>
-              )}
-
-              {/* Error state */}
-              {!awaitingBrokerUpload && !loading && error && (
-                <div className="py-10 text-center">
-                  <div role="alert" className="mx-auto max-w-md rounded-md border border-neg/30 bg-neg-tint px-4 py-3">
-                    <p className="text-sm text-neg">{error}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setDateModalOpen(true)}
-                    className="mt-6 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-deep active:scale-[0.95]"
-                  >
-                    Try again
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Stage 3: Refine with Brokers (broker upload modal content would go here, but it's handled by the Modal component) */}
-          {stage === 'refine' && (
-            // This stage is primarily handled by the awaitingBrokerUpload state in stage === 'screening' above
-            // and the broker upload Modal below
-            <div></div> // Placeholder - the actual refine UI is in the awaitingBrokerUpload conditional above
-          )}
+          {/* Stage 3 (refine) is handled by the awaitingBrokerUpload + upload Modal below */}
         </div>
       )}
 
@@ -1126,7 +990,10 @@ export default function StockScreeningPage() {
       {loading && (
         <div className="py-10">
           <p className="text-center font-mono text-xs text-ink-muted">
-            Ranking candidates on live market data{asOfDate ? ` · as of ${asOfDate}` : ''}…
+            {t(
+              `Ranking candidates on live market data${asOfDate ? ` · as of ${asOfDate}` : ''}…`,
+              `Memeringkat kandidat pada data pasar langsung${asOfDate ? ` · per ${asOfDate}` : ''}…`,
+            )}
           </p>
           <ReportSkeleton />
         </div>
@@ -1141,9 +1008,9 @@ export default function StockScreeningPage() {
           <button
             type="button"
             onClick={() => setDateModalOpen(true)}
-            className="mt-6 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-deep active:scale-[0.95]"
+            className="mt-6 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-on-brand transition-colors hover:bg-brand-deep active:scale-[0.95]"
           >
-            Try again
+            {t('Try again', 'Coba lagi')}
           </button>
         </div>
       )}
@@ -1154,46 +1021,83 @@ export default function StockScreeningPage() {
           <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
             <div>
               <p className="font-mono text-xs text-ink-muted">
-                Closing screen{asOfDate ? ` · as of ${asOfDate}` : ''} · {initialScreenings.length} candidate
-                {initialScreenings.length === 1 ? '' : 's'}{aiUsed && ' · AI-enhanced'}
+                {t('Closing screen', 'Penyaringan penutupan')}
+                {asOfDate ? t(` · as of ${asOfDate}`, ` · per ${asOfDate}`) : ''} ·{' '}
+                {t(`${initialScreenings.length} candidate${initialScreenings.length === 1 ? '' : 's'}`, `${initialScreenings.length} kandidat`)}
+                {aiUsed && t(' · AI-enhanced', ' · ditingkatkan AI')}
               </p>
-              <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">Candidates ready</h2>
+              <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">{t('Candidates ready', 'Kandidat siap')}</h2>
               <p className="mt-2 max-w-prose text-sm text-ink-muted">
-                Optionally attach broker-summary screenshots, then re-rank to apply pack-hunting
-                detection — or skip straight to the final ranking.
+                {t(
+                  'Optionally attach broker-summary screenshots, then re-rank to apply pack-hunting detection — or skip straight to the final ranking.',
+                  'Lampirkan tangkapan layar ringkasan broker secara opsional, lalu peringkat ulang untuk menerapkan deteksi perburuan kawanan — atau langsung ke peringkat akhir.',
+                )}
               </p>
             </div>
-            <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
+            <QuietButton onClick={requestNewScreening}>{t('New screening', 'Penyaringan baru')}</QuietButton>
           </header>
 
           <ul className="mt-6 divide-y divide-line">
             {initialScreenings.map((s, i) => {
               const owner = category === 'conglomerate' ? conglomerateOwner(s.ticker) : null;
+              const expanded = expandedBandarTicker === s.ticker;
               return (
-              <li key={s.ticker} className="flex items-baseline gap-3 py-2.5">
-                <span className="w-5 shrink-0 font-mono text-sm tabular-nums text-ink-muted">{i + 1}</span>
-                <span className="font-mono text-sm font-semibold text-ink">{s.ticker}</span>
-                <span className="flex-1 min-w-0 text-xs text-ink-muted">
-                  <span className="block truncate">
-                    {s.name}
-                    {s.capTier ? ` · ${s.capTier}` : ''}
-                  </span>
-                  {owner && (
-                    <span className="mt-1 block" title={`Controlling owner — ${owner}`}>
-                      <Pill tone="muted">{owner}</Pill>
+              <li key={s.ticker}>
+                <div className="list-item-enter flex items-center gap-3 py-2.5" style={{ '--i': i }}>
+                  <span className="w-5 shrink-0 self-start font-mono text-sm tabular-nums text-ink-muted">{i + 1}</span>
+                  {/* Identity: ticker over name, one stacked cell. The data
+                      columns align to this cell's vertical center. */}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono text-sm font-semibold text-ink">{s.ticker}</span>
+                      <span className="truncate text-xs text-ink-muted">
+                        {s.name}
+                        {s.capTier ? ` · ${s.capTier}` : ''}
+                      </span>
+                    </div>
+                    {owner && (
+                      <span className="mt-1 block" title={t(`Controlling owner — ${owner}`, `Pemilik pengendali — ${owner}`)}>
+                        <Pill tone="muted">{owner}</Pill>
+                      </span>
+                    )}
+                  </div>
+                  {s.composite != null && (
+                    <span
+                      className="w-8 shrink-0 text-right font-mono text-sm tabular-nums text-ink-muted"
+                      title={t('Initial ranking score', 'Skor peringkat awal')}
+                    >
+                      {s.composite.toFixed(1)}
                     </span>
                   )}
-                </span>
-                {s.composite != null && (
-                  <span
-                    className="font-mono text-sm tabular-nums text-ink-muted"
-                    title="Initial ranking score"
-                  >
-                    {s.composite.toFixed(1)}
-                  </span>
+                  {s.overallRating && <RatingFigure rating={s.overallRating} className="w-7 shrink-0 text-left text-sm" />}
+                  {s.bandarmology?.accdist && (
+                    <button
+                      onClick={() => toggleBandarExpand(s.ticker)}
+                      aria-expanded={expanded}
+                      title={t(
+                        'Broker accumulation/distribution for the session — folded into the rating. Click to expand the broker summary.',
+                        'Akumulasi/distribusi broker untuk sesi ini — diperhitungkan dalam peringkat. Klik untuk membuka ringkasan broker.',
+                      )}
+                      className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 transition-colors hover:bg-well/70"
+                    >
+                      <Pill tone={accTone(s.bandarmology.accdist)}>{s.bandarmology.accdist}</Pill>
+                      <svg
+                        className="h-3 w-3 shrink-0 text-ink-muted transition-transform duration-200"
+                        style={{ transform: expanded ? 'rotate(180deg)' : undefined }}
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  )}
+                  <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
+                </div>
+                {expanded && s.bandarmology && (
+                  <div className="pb-3 pl-8 pr-1">
+                    <BandarSummary bandar={s.bandarmology} />
+                  </div>
                 )}
-                {s.overallRating && <RatingFigure rating={s.overallRating} className="text-sm" />}
-                <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
               </li>
               );
             })}
@@ -1201,12 +1105,17 @@ export default function StockScreeningPage() {
 
           <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-5">
             <PrimaryButton onClick={handleRefineAction}>
-              {brokerScreenshots.length > 0 ? 'Re-rank candidates' : 'Get final ranking'}
+              {brokerScreenshots.length > 0
+                ? t('Re-rank candidates', 'Peringkat ulang kandidat')
+                : t('Get final ranking', 'Dapatkan peringkat akhir')}
             </PrimaryButton>
             <QuietButton onClick={() => setUploadOpen(true)}>
               {brokerScreenshots.length > 0
-                ? `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached · add more`
-                : 'Attach broker screenshots'}
+                ? t(
+                    `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached · add more`,
+                    `${brokerScreenshots.length} tangkapan layar terlampir · tambah lagi`,
+                  )
+                : t('Attach broker screenshots', 'Lampirkan tangkapan layar broker')}
             </QuietButton>
           </div>
 
@@ -1225,21 +1134,29 @@ export default function StockScreeningPage() {
             <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
               <div>
                 <p className="font-mono text-xs text-ink-muted">
-                  Ranked {asOfDate ? `· as of ${asOfDate}` : ''} · {analysisMode === 'midday' ? 'midday' : 'EOD close'}{aiUsed && ' · AI-enhanced'}
+                  {t('Ranked', 'Diperingkat')} {asOfDate ? t(`· as of ${asOfDate}`, `· per ${asOfDate}`) : ''} ·{' '}
+                  {analysisMode === 'midday' ? t('midday', 'tengah hari') : t('EOD close', 'tutup EOD')}
+                  {aiUsed && t(' · AI-enhanced', ' · ditingkatkan AI')}
                 </p>
                 <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">
-                  Top {screenings.length} candidate{screenings.length === 1 ? '' : 's'}
+                  {t(`Top ${screenings.length} candidate${screenings.length === 1 ? '' : 's'}`, `${screenings.length} kandidat teratas`)}
                 </h2>
                 <p className="mt-2 text-sm text-ink-muted">
                   {reranked
-                    ? 'Re-ranked with broker summaries — weighted toward near-term flow.'
-                    : 'Ranked by composite score (short 35% · mid 35% · long 30%).'}
+                    ? t(
+                        'Re-ranked with broker summaries — weighted toward near-term flow.',
+                        'Diperingkat ulang dengan ringkasan broker — dibobotkan ke aliran jangka pendek.',
+                      )
+                    : t(
+                        'Ranked by composite score (short 35% · mid 35% · long 30%).',
+                        'Diperingkat berdasarkan skor komposit (pendek 35% · menengah 35% · panjang 30%).',
+                      )}
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {reranked && <Pill tone="brand">Refined</Pill>}
-                {aiUsed && <Pill tone="pos">AI-enhanced</Pill>}
-                <QuietButton onClick={requestNewScreening}>New screening</QuietButton>
+                {reranked && <Pill tone="brand">{t('Refined', 'Disempurnakan')}</Pill>}
+                {aiUsed && <Pill tone="pos">{t('AI-enhanced', 'Ditingkatkan AI')}</Pill>}
+                <QuietButton onClick={requestNewScreening}>{t('New screening', 'Penyaringan baru')}</QuietButton>
               </div>
             </header>
 
@@ -1257,18 +1174,19 @@ export default function StockScreeningPage() {
                 <thead>
                   <tr className="border-y border-line text-xs font-medium text-ink-muted">
                     <th className="py-2.5 pl-1 pr-2 text-left">#</th>
-                    <th className="py-2.5 px-2 text-left">Stock</th>
-                    <th className="py-2.5 px-2 text-right">Price</th>
+                    <th className="py-2.5 px-2 text-left">{t('Stock', 'Saham')}</th>
+                    <th className="py-2.5 px-2 text-right">{t('Price', 'Harga')}</th>
                     <th className="py-2.5 px-2 text-right">1M</th>
-                    <th className="py-2.5 px-2 text-right">Score</th>
-                    <th className="py-2.5 pl-2 pr-1 text-right">Rating</th>
+                    <th className="py-2.5 px-2 text-right">{t('Score', 'Skor')}</th>
+                    <th className="py-2.5 pl-2 pr-1 text-right">{t('Rating', 'Peringkat')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {screenings.map((result, index) => (
                     <tr
                       key={result.ticker}
-                      className={`align-top transition-colors duration-150 hover:bg-well/60 result-row-enter result-row-enter-delay-${Math.min(index, 9)}`}
+                      className="result-row-enter align-top transition-colors duration-150 hover:bg-well/60"
+                      style={{ '--i': Math.min(index, 9) }}
                     >
                       <td className="py-3.5 pl-1 pr-2 font-mono text-sm tabular-nums text-ink-muted">
                         {result.rank}
@@ -1278,7 +1196,7 @@ export default function StockScreeningPage() {
                           <span className="font-mono text-sm font-semibold text-ink">{result.ticker}</span>
                           {result.board === 'Pemantauan Khusus' && (
                             <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">
-                              monitored
+                              {t('monitored', 'pemantauan')}
                             </span>
                           )}
                         </div>
@@ -1323,33 +1241,43 @@ export default function StockScreeningPage() {
             <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line p-5">
               <div className="max-w-prose">
                 <p className="text-sm font-medium">
-                  {reranked ? 'Broker summaries applied' : 'Refine with broker summaries'}
+                  {reranked
+                    ? t('Broker summaries applied', 'Ringkasan broker diterapkan')
+                    : t('Refine with broker summaries', 'Sempurnakan dengan ringkasan broker')}
                 </p>
                 <p className="mt-1 text-sm text-ink-muted">
                   {brokerScreenshots.length > 0
-                    ? `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached. Re-ranking weights the near-term flow these confirm.`
-                    : 'Attach broker-summary screenshots for any of the names above, then re-rank toward near-term flow.'}
+                    ? t(
+                        `${brokerScreenshots.length} screenshot${brokerScreenshots.length > 1 ? 's' : ''} attached. Re-ranking weights the near-term flow these confirm.`,
+                        `${brokerScreenshots.length} tangkapan layar terlampir. Pemeringkatan ulang membobotkan aliran jangka pendek yang dikonfirmasi.`,
+                      )
+                    : t(
+                        'Attach broker-summary screenshots for any of the names above, then re-rank toward near-term flow.',
+                        'Lampirkan tangkapan layar ringkasan broker untuk salah satu nama di atas, lalu peringkat ulang ke aliran jangka pendek.',
+                      )}
                 </p>
               </div>
               <PrimaryButton onClick={handleRefineAction}>
-                {brokerScreenshots.length > 0 ? 'Review & re-rank' : 'Attach broker screenshots'}
+                {brokerScreenshots.length > 0
+                  ? t('Review & re-rank', 'Tinjau & peringkat ulang')
+                  : t('Attach broker screenshots', 'Lampirkan tangkapan layar broker')}
               </PrimaryButton>
             </div>
 
             {/* Save */}
             <div className="mt-6 flex flex-wrap items-end justify-between gap-4 border-t border-line pt-6">
               <div className="min-w-64 flex-1">
-                <FieldLabel htmlFor="screening-name">Save this list as</FieldLabel>
+                <FieldLabel htmlFor="screening-name">{t('Save this list as', 'Simpan daftar ini sebagai')}</FieldLabel>
                 <input
                   id="screening-name"
                   type="text"
                   value={screeningName}
                   onChange={(e) => setScreeningName(e.target.value)}
-                  placeholder="e.g. 'Momentum leaders'"
+                  placeholder={t("e.g. 'Momentum leaders'", "mis. 'Pemimpin momentum'")}
                   className="w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
                 />
               </div>
-              <PrimaryButton onClick={handleSaveScreening}>Save list</PrimaryButton>
+              <PrimaryButton onClick={handleSaveScreening}>{t('Save list', 'Simpan daftar')}</PrimaryButton>
               {saveSuccess && (
                 <span className="ml-3 h-4 w-4">
                   <svg className="h-4 w-4 success-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1360,7 +1288,10 @@ export default function StockScreeningPage() {
             </div>
             {savedAs && (
               <p className="mt-3 text-sm text-pos">
-                Saved as "{savedAs}" — it will appear under saved screenings on the start screen.
+                {t(
+                  `Saved as "${savedAs}" — it will appear under saved screenings on the start screen.`,
+                  `Disimpan sebagai "${savedAs}" — akan muncul di penyaringan tersimpan pada layar awal.`,
+                )}
               </p>
             )}
 
@@ -1382,14 +1313,20 @@ export default function StockScreeningPage() {
           setDateModalOpen(false);
           setStage('date');
         }}
-        title="As of which date?"
-        description="The desk reads price action up to and including this session."
+        title={t('As of which date?', 'Per tanggal berapa?')}
+        description={t(
+          'The desk reads price action up to and including this session.',
+          'Meja riset membaca pergerakan harga hingga dan termasuk sesi ini.',
+        )}
       >
         <div className="rounded-xl border border-line p-4">
           <DatePicker inline value={asOfDate} max={TODAY} onChange={handleDatePicked} />
         </div>
         <p className="mt-4 text-center text-xs text-ink-muted">
-          Surfacing the top {numStocks} — adjust in Filters before running.
+          {t(
+            `Surfacing the top ${numStocks} — adjust in Filters before running.`,
+            `Menampilkan ${numStocks} teratas — sesuaikan di Filter sebelum menjalankan.`,
+          )}
         </p>
       </Modal>
 
@@ -1397,12 +1334,15 @@ export default function StockScreeningPage() {
       <Modal
         open={newScreeningConfirmOpen}
         onClose={() => setNewScreeningConfirmOpen(false)}
-        title="Start a new screening?"
-        description="This will clear the current candidates, uploaded screenshots, and unsaved list name."
+        title={t('Start a new screening?', 'Mulai penyaringan baru?')}
+        description={t(
+          'This will clear the current candidates, uploaded screenshots, and unsaved list name.',
+          'Ini akan menghapus kandidat saat ini, tangkapan layar yang diunggah, dan nama daftar yang belum disimpan.',
+        )}
       >
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <QuietButton onClick={() => setNewScreeningConfirmOpen(false)}>Cancel</QuietButton>
-          <PrimaryButton onClick={startNewScreening}>Start new screening</PrimaryButton>
+          <QuietButton onClick={() => setNewScreeningConfirmOpen(false)}>{t('Cancel', 'Batal')}</QuietButton>
+          <PrimaryButton onClick={startNewScreening}>{t('Start new screening', 'Mulai penyaringan baru')}</PrimaryButton>
         </div>
       </Modal>
 
@@ -1410,8 +1350,11 @@ export default function StockScreeningPage() {
       <Modal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        title="Broker summary screenshots"
-        description="Attach summaries for the candidates above, then re-rank toward near-term flow."
+        title={t('Broker summary screenshots', 'Tangkapan layar ringkasan broker')}
+        description={t(
+          'Attach summaries for the candidates above, then re-rank toward near-term flow.',
+          'Lampirkan ringkasan untuk kandidat di atas, lalu peringkat ulang ke aliran jangka pendek.',
+        )}
       >
         <BrokerScreenshotField
           id="screening-upload"
@@ -1423,8 +1366,8 @@ export default function StockScreeningPage() {
         <div className="mt-6 flex items-center justify-between gap-4">
           <span className="text-sm text-ink-muted">
             {brokerScreenshots.length > 0
-              ? `${brokerScreenshots.length} attached`
-              : 'Optional — re-rank works without them.'}
+              ? t(`${brokerScreenshots.length} attached`, `${brokerScreenshots.length} terlampir`)
+              : t('Optional — re-rank works without them.', 'Opsional — peringkat ulang tetap berjalan tanpanya.')}
           </span>
           <div className="flex items-center gap-3">
             {rerankSuccess && (
@@ -1434,7 +1377,7 @@ export default function StockScreeningPage() {
                 </svg>
               </span>
             )}
-            <PrimaryButton onClick={rerankWithBrokers}>Re-rank candidates</PrimaryButton>
+            <PrimaryButton onClick={rerankWithBrokers}>{t('Re-rank candidates', 'Peringkat ulang kandidat')}</PrimaryButton>
           </div>
         </div>
       </Modal>
