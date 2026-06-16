@@ -5,6 +5,8 @@
 // bursting (e.g. a full-universe screen) would otherwise be rejected. These
 // surfaces are display-only context; they never feed the locked analysis score.
 
+import { finishIdxActivity, setIdxConfigured, startIdxActivity } from './idxSession';
+
 const BASE = '/idx';
 const MIN_INTERVAL_MS = 1200; // stay under the BASIC 1 req/s ceiling
 
@@ -43,7 +45,16 @@ async function idxFetch(path) {
       res = await fetch(`${BASE}${path}`);
     }
     if (!res.ok) {
-      throw new Error(`IDX API request failed (HTTP ${res.status})`);
+      let message = `IDX API request failed (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.message) message = errJson.message;
+      } catch {
+        /* body wasn't JSON (e.g. Vercel's own routing error page) — keep the generic message */
+      }
+      const err = new Error(message);
+      err.status = res.status;
+      throw err;
     }
     const json = await res.json();
     if (json?.success === false) {
@@ -180,4 +191,49 @@ async function fetchBandarmologyUncached(code, date) {
     buyRows: buys.map(buyRow),
     sellRows: sells.map(sellRow),
   };
+}
+
+// Live health check for the IDX proxy: a real round-trip through /idx ->
+// api/idx.js -> RapidAPI, so "configured" reflects the server-side
+// IDX_RAPIDAPI_KEY rather than anything visible to the browser.
+export async function checkIdxHealth() {
+  const activityId = startIdxActivity({
+    source: 'IDX',
+    title: 'Live IDX health check started',
+    summary: 'Requesting the market-wide broker tape through the IDX proxy.',
+  });
+
+  try {
+    const data = await fetchTopBrokers();
+    setIdxConfigured(true);
+    finishIdxActivity(activityId, {
+      source: 'IDX',
+      title: 'Live IDX health check passed',
+      summary: `Broker tape returned ${data.brokerCount} brokers for session ${data.sessionDate ?? 'n/a'}.`,
+      evidence: {
+        sections: [
+          {
+            title: 'Request',
+            facts: [
+              { label: 'Endpoint', value: `${BASE}/api/market-detector/top-broker` },
+              { label: 'Brokers returned', value: data.brokerCount },
+              { label: 'Session date', value: data.sessionDate ?? 'n/a' },
+            ],
+          },
+        ],
+      },
+    });
+    return { active: true, configured: true };
+  } catch (error) {
+    // A 500 specifically means the proxy ran but the env var is unset server-side.
+    const missingKey = error.status === 500 && /IDX_RAPIDAPI_KEY/.test(error.message || '');
+    setIdxConfigured(!missingKey);
+    finishIdxActivity(activityId, {
+      source: 'IDX',
+      title: 'Live IDX health check failed',
+      summary: error.message || 'The IDX proxy did not respond successfully.',
+      error,
+    });
+    return { active: false, configured: !missingKey, error: error.message || String(error) };
+  }
 }

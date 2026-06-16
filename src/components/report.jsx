@@ -66,7 +66,7 @@ export function Section({ title, aside, children }) {
   );
 }
 
-export function Pill({ children, tone = 'info' }) {
+export function Pill({ children, tone = 'info', className = '' }) {
   const tones = {
     info: 'bg-info-tint text-info',
     brand: 'bg-brand-tint text-brand-strong',
@@ -76,7 +76,7 @@ export function Pill({ children, tone = 'info' }) {
     muted: 'bg-well text-ink-muted',
   };
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} transition-colors duration-150`}>
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} transition-colors duration-150 ${className}`}>
       {children}
     </span>
   );

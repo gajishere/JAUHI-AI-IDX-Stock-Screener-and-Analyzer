@@ -81,7 +81,7 @@ class ClaudeAIService {
     if (!this.isConfigured()) {
       recordAIEvent({
         level: 'error',
-        source: 'AI Status',
+        source: 'Claude',
         title: 'Claude API key missing',
         summary: 'Set VITE_CLAUDE_API_KEY before running live AI checks.',
       });
@@ -89,7 +89,7 @@ class ClaudeAIService {
     }
 
     const activityId = startAIActivity({
-      source: 'AI Status',
+      source: 'Claude',
       title: 'Live AI health check started',
       summary: 'Sending a minimal request to Claude through the Vite proxy.',
     });
@@ -115,7 +115,7 @@ class ClaudeAIService {
       }
 
       finishAIActivity(activityId, {
-        source: 'AI Status',
+        source: 'Claude',
         title: 'Live AI health check passed',
         summary: 'Claude responded successfully through the configured proxy.',
         evidence: {
@@ -139,7 +139,7 @@ class ClaudeAIService {
       return { active: true, configured: true };
     } catch (error) {
       finishAIActivity(activityId, {
-        source: 'AI Status',
+        source: 'Claude',
         title: 'Live AI health check failed',
         summary: error.message || 'Claude did not respond successfully.',
         error,

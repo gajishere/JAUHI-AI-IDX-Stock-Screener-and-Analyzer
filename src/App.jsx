@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import AIStatusPage from './pages/AIStatusPage';
+import ApiStatusPage from './pages/ApiStatusPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
 import { SettingsMenu } from './components/SettingsMenu';
@@ -10,7 +10,7 @@ function App() {
   const location = useLocation();
   const isAnalysisPage = location.pathname === '/analysis' || location.pathname === '/';
   const isScreeningPage = location.pathname === '/screening';
-  const isAIStatusPage = location.pathname === '/ai-status';
+  const isApiStatusPage = location.pathname === '/api-status';
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -50,14 +50,14 @@ function App() {
                 {t('Stock Screening', 'Penyaringan Saham')}
               </Link>
               <Link
-                to="/ai-status"
+                to="/api-status"
                 className={`-mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium transition-colors duration-150 sm:min-h-0 sm:px-0 sm:pb-3 ${
-                  isAIStatusPage
+                  isApiStatusPage
                     ? 'border-brand text-ink'
                     : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
                 }`}
               >
-                {t('AI Status', 'Status AI')}
+                {t('API Status', 'Status API')}
               </Link>
             </nav>
           </div>
@@ -77,8 +77,8 @@ function App() {
         <div className="route-panel" hidden={!isScreeningPage}>
           <StockScreeningPage />
         </div>
-        <div className="route-panel" hidden={!isAIStatusPage}>
-          <AIStatusPage />
+        <div className="route-panel" hidden={!isApiStatusPage}>
+          <ApiStatusPage />
         </div>
       </main>
 
