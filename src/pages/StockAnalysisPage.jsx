@@ -105,8 +105,8 @@ export default function StockAnalysisPage() {
       .then((data) => {
         if (active) setLiveBroker(data);
       })
-      .catch(() => {
-        /* keep the static brokerContext fallback */
+      .catch((err) => {
+        console.error('IDX live broker tape failed, using static fallback:', err);
       });
     return () => {
       active = false;
@@ -217,8 +217,8 @@ export default function StockAnalysisPage() {
       setBandarLoading(true);
       try {
         bandarResult = await fetchBandarmology(code, { date: asOfSession });
-      } catch {
-        /* IDX bandarmology unavailable — score falls back to flow without it */
+      } catch (err) {
+        console.error('IDX bandarmology unavailable, falling back to flow without it:', err);
       } finally {
         setBandarLoading(false);
       }
