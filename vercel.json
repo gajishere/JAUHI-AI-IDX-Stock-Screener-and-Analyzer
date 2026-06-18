@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/anthropic/:path*",
-      "destination": "https://api.anthropic.com/:path*"
+      "destination": "/api/anthropic?path=/:path*"
     },
     {
       "source": "/yf/:path*",
