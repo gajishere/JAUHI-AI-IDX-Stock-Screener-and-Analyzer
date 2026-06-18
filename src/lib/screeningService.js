@@ -29,16 +29,7 @@ function screeningRangeForDate(date) {
   return '10y';
 }
 
-// Check if Claude API key is configured via Vite env
-const getApiKey = () => {
-  // In Vite, env vars are accessed via import.meta.env
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env.VITE_CLAUDE_API_KEY;
-  }
-  return undefined;
-};
-
-const API_KEY = getApiKey();
+// Key is injected server-side by the Vite proxy — no client-side key needed.
 const API_URL = '/anthropic/v1/messages'; // Proxied via vite.config.js
 const MODEL = 'claude-haiku-4-5-20251001'; // Using Haiku for efficiency
 const EVIDENCE_NOTE = 'This is an evidence and rationale summary generated from app inputs and model outputs, not hidden chain-of-thought.';
@@ -192,7 +183,7 @@ Return ONLY the JSON structure specified in the system prompt.
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
+
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
@@ -1045,7 +1036,7 @@ Provide your response in the exact JSON format specified in the system prompt.
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
+
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },

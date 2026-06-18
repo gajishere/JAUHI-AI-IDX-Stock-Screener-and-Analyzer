@@ -55,38 +55,24 @@ async function prepareImageBlocks(files = []) {
 
 class ClaudeAIService {
   constructor() {
-    // Safely access environment variable
-    this.apiKey = typeof import.meta !== 'undefined' && import.meta.env ?
-                  import.meta.env.VITE_CLAUDE_API_KEY :
-                  undefined;
-    // Proxied via vite.config.js (/anthropic -> https://api.anthropic.com).
-    // Anthropic blocks direct browser calls (CORS), so we must not hit the API
-    // host directly — screeningService.js routes the same way.
+    // Key is injected server-side by the Vite proxy (vite.config.js /anthropic
+    // route) — never sent from the browser. No VITE_ variable needed.
     this.apiUrl = '/anthropic/v1/messages';
     this.model = 'claude-haiku-4-5-20251001'; // Haiku 4.5
-    setAIConfigured(this.isConfigured());
+    setAIConfigured(true);
   }
 
   getCurrentDateTime() {
     return new Date().toISOString();
   }
 
-  // Check if API key is configured
+  // Key lives server-side; from the browser's perspective the service is always
+  // configured — a misconfigured key will surface as a 401 from the proxy.
   isConfigured() {
-    return !!this.apiKey && this.apiKey.trim() !== '';
+    return true;
   }
 
   async checkHealth() {
-    setAIConfigured(this.isConfigured());
-    if (!this.isConfigured()) {
-      recordAIEvent({
-        level: 'error',
-        source: 'Claude',
-        title: 'Claude API key missing',
-        summary: 'Set VITE_CLAUDE_API_KEY before running live AI checks.',
-      });
-      return { active: false, configured: false, error: 'Claude API key not configured' };
-    }
 
     const activityId = startAIActivity({
       source: 'Claude',
@@ -99,7 +85,6 @@ class ClaudeAIService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
@@ -192,7 +177,7 @@ class ClaudeAIService {
   // Generate AI-enhanced analysis
   async getAIEnhancedAnalysis(ticker, analysisData, fundamentals, brokerScreenshots = [], bandar = null, language = 'en') {
     if (!this.isConfigured()) {
-      throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in environment variables.');
+      throw new Error('Claude API key not configured. Please set CLAUDE_API_KEY in .env.');
     }
 
     const context = this.prepareAnalysisContext(ticker, analysisData, fundamentals);
@@ -328,10 +313,7 @@ class ClaudeAIService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
-          // Permit browser-originated calls (harmless via proxy, required if
-          // ever called cross-origin directly).
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
@@ -436,7 +418,7 @@ class ClaudeAIService {
   // reads + the already-screened candidates; never fabricates flow/broker data.
   async getScreeningFramework({ macroText, candidates, mode, asOfDate, language = 'en' }) {
     if (!this.isConfigured()) {
-      throw new Error('Claude API key not configured. Please set VITE_CLAUDE_API_KEY in environment variables.');
+      throw new Error('Claude API key not configured. Please set CLAUDE_API_KEY in .env.');
     }
 
     const candidateLines = candidates
@@ -515,7 +497,6 @@ ${languageDirective(language)} (Ticker codes stay as-is.)`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },

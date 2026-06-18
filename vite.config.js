@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
   // IDX_RAPIDAPI_KEY here in the Node config without exposing it to the client.
   const env = loadEnv(mode, process.cwd(), '')
   const idxKey = env.IDX_RAPIDAPI_KEY
+  const claudeKey = env.CLAUDE_API_KEY
 
   return {
   plugins: [react(), tailwindcss()],
@@ -53,6 +54,7 @@ export default defineConfig(({ mode }) => {
         rewrite: (path) => path.replace(/^\/anthropic/, ''),
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
+            if (claudeKey) proxyReq.setHeader('x-api-key', claudeKey)
             proxyReq.removeHeader('origin');
             proxyReq.removeHeader('referer');
           });
