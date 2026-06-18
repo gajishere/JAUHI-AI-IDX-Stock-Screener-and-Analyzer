@@ -12,7 +12,7 @@
 import { emiten } from '../data/emiten.js';
 import { boardRisk, marketCap as calcMarketCap } from './universe.js';
 import { resilientFetch } from './marketData.js';
-import { capTierBounds, shortlistSizeFor } from './screeningCategories.js';
+import { capTiersBounds, shortlistSizeFor } from './screeningCategories.js';
 
 const YF = '/yf';
 const SPARK_CHUNK = 20; // Yahoo rejects spark requests with > 20 symbols
@@ -84,9 +84,9 @@ const fmtPct = (r) => (r == null ? 'n/a' : `${r >= 0 ? '+' : ''}${(r * 100).toFi
 // eligible, how they're ranked, and how deep a shortlist to enrich.
 export async function scanUniverse(
   date,
-  { count = 5, category, capTier = 'every', sector = '', boardLevel = '', range = '1y' } = {}
+  { count = 5, category, capTier = [], sector = '', boardLevel = '', range = '1y' } = {}
 ) {
-  const cap_t = capTierBounds(capTier);
+  const cap_t = capTiersBounds(capTier);
   // Effective cap bounds = intersection of the cap-tier selector and the
   // category's intrinsic floor/ceiling (e.g. Penny is small-cap only, Blue
   // Chip is ≥Rp10T).

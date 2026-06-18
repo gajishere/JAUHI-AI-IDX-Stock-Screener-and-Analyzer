@@ -81,7 +81,7 @@ export function SettingsMenu() {
         <div
           role="dialog"
           aria-label={t('Settings', 'Pengaturan')}
-          className="dropdown-enter absolute right-0 top-[calc(100%+0.5rem)] z-dropdown w-64 max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-elevated p-4 shadow-xl shadow-ink/10"
+          className="surface-float dropdown-enter absolute right-0 top-[calc(100%+0.5rem)] z-dropdown w-64 max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-elevated p-4"
         >
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">

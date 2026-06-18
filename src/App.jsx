@@ -13,9 +13,9 @@ function App() {
   const isApiStatusPage = location.pathname === '/api-status';
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       <header className="border-b border-line">
-        <div className="mx-auto w-full max-w-4xl px-5 pt-8 sm:px-6 sm:pt-12">
+        <div className="mx-auto w-full max-w-4xl px-5 pt-[max(2rem,env(safe-area-inset-top))] sm:px-6 sm:pt-12">
           <div className="space-y-5 sm:space-y-6">
             <div className="flex items-start justify-between gap-4">
               <p className="font-mono text-xs text-ink-muted">
@@ -83,11 +83,11 @@ function App() {
       </main>
 
       <footer className="border-t border-line">
-        <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-4xl px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
           <p className="text-xs text-ink-muted">
             {t(
-              'Research notes are computed from public market data and are not investment advice.',
-              'Catatan riset dihitung dari data pasar publik dan bukan merupakan nasihat investasi.',
+              'Research notes are generated from live market data and are not investment advice.',
+              'Catatan riset dihasilkan dari data pasar real-time dan bukan merupakan nasihat investasi.',
             )}
           </p>
         </div>

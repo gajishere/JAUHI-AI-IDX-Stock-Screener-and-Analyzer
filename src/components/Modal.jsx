@@ -66,7 +66,7 @@ export function Modal({ open, onClose, title, description, children, labelledByI
         aria-modal="true"
         aria-labelledby={labelledById}
         tabIndex={-1}
-        className={`relative w-full max-w-lg rounded-xl border border-line bg-elevated p-7 shadow-2xl shadow-ink/20 outline-none ${isClosing ? 'modal-leave' : 'modal-enter'}`}
+        className={`surface-float relative w-full max-w-lg rounded-xl border border-line bg-elevated p-7 outline-none ${isClosing ? 'modal-leave' : 'modal-enter'}`}
       >
         <div className="flex items-start justify-between gap-6">
           <div>

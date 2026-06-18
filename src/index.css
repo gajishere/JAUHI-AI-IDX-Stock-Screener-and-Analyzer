@@ -34,6 +34,19 @@
     --c-neg-tint: #fdebec;
     --c-warn: #8a5e00;
     --c-warn-tint: #fbf2dd;
+
+    /* ===== Depth system (light) =====
+       Refined depth: surfaces carry a soft top-down gradient sheen and a
+       low-opacity, ink-tinted layered shadow. A faint inner highlight on the
+       top edge reads as a lifted, lit surface rather than a flat fill. */
+    --surface-raised: linear-gradient(180deg, #ffffff 0%, #f6f8fa 100%);
+    --surface-float: linear-gradient(180deg, #ffffff 0%, #f1f5f8 100%);
+    --shadow-raised: 0 1px 2px rgb(22 24 28 / 0.04), 0 6px 16px -5px rgb(22 24 28 / 0.08);
+    --shadow-float: 0 6px 14px -5px rgb(22 24 28 / 0.10), 0 22px 44px -12px rgb(22 24 28 / 0.18);
+    --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
+    /* Canvas atmosphere: a near-white ground that lifts toward the top with a
+       whisper of the brand hue, so the page reads as lit, not paper-flat. */
+    --canvas: radial-gradient(130% 70% at 50% -8%, color-mix(in srgb, var(--c-brand) 5%, #ffffff) 0%, #ffffff 36%, #f4f7f9 100%);
   }
 
   .dark {
@@ -64,12 +77,35 @@
     --c-neg-tint: #331519;
     --c-warn: #e8a93c;
     --c-warn-tint: #2c2410;
+
+    /* ===== Depth system (night) =====
+       On the near-black ground a cast shadow is invisible, so elevation is
+       carried by a lighter surface gradient + a top edge highlight, with a
+       deep ambient shadow underneath for the floating layers. */
+    --surface-raised: linear-gradient(180deg, #20262e 0%, #161a20 100%);
+    --surface-float: linear-gradient(180deg, #242b34 0%, #181d24 100%);
+    --shadow-raised: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -12px rgb(0 0 0 / 0.7);
+    --shadow-float: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 18px 44px -12px rgb(0 0 0 / 0.85);
+    --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.06);
+    --canvas: radial-gradient(130% 70% at 50% -8%, color-mix(in srgb, var(--c-brand) 9%, #12161b) 0%, #0f1216 40%, #0d0f12 100%);
   }
 
   body {
     @apply bg-paper text-ink font-sans antialiased;
     font-feature-settings: "calt", "liga";
     transition: background-color 200ms var(--ease-out-quint), color 200ms var(--ease-out-quint);
+  }
+
+  /* Canvas atmosphere as a viewport-fixed layer behind all content. A fixed
+     pseudo-element is GPU-composited and stable on iOS Safari, where
+     `background-attachment: fixed` janks on scroll (and is often ignored). */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--canvas);
+    pointer-events: none;
   }
 
   ::selection {
@@ -231,6 +267,45 @@
 }
 
 @layer components {
+  /* ===== Depth surfaces =====
+     Refined-depth replacements for the old flat `bg-paper … shadow-sm` cards.
+     `.surface-raised` is the resting panel (calendars, saved boxes, report
+     containers); `.surface-float` is the floating layer (modals, popovers,
+     dropdowns). Both layer a gradient sheen + a soft shadow over whatever
+     background-color the element already carries, and round off with a hairline
+     border via the existing `border-line` utility. */
+  .surface-raised {
+    background-image: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .surface-float {
+    background-image: var(--surface-float);
+    box-shadow: var(--shadow-float);
+  }
+
+  /* Verdict answer surface — a diagonal wash from the verdict tint (top, behind
+     the large display verdict) down to the neutral surface (bottom, behind the
+     dotted-leader rows so muted labels keep their contrast), plus a soft shadow
+     tinted with the verdict hue so the card reads as a lit, colored panel. */
+  .verdict-pos,
+  .verdict-warn,
+  .verdict-neg {
+    box-shadow: var(--edge-highlight), 0 12px 34px -14px var(--verdict-glow);
+  }
+  .verdict-pos {
+    --verdict-glow: color-mix(in srgb, var(--c-pos) 38%, transparent);
+    background-image: linear-gradient(158deg, var(--c-pos-tint) 0%, color-mix(in srgb, var(--c-pos-tint) 45%, var(--c-elevated)) 48%, var(--c-elevated) 100%);
+  }
+  .verdict-warn {
+    --verdict-glow: color-mix(in srgb, var(--c-warn) 34%, transparent);
+    background-image: linear-gradient(158deg, var(--c-warn-tint) 0%, color-mix(in srgb, var(--c-warn-tint) 45%, var(--c-elevated)) 48%, var(--c-elevated) 100%);
+  }
+  .verdict-neg {
+    --verdict-glow: color-mix(in srgb, var(--c-neg) 34%, transparent);
+    background-image: linear-gradient(158deg, var(--c-neg-tint) 0%, color-mix(in srgb, var(--c-neg-tint) 45%, var(--c-elevated)) 48%, var(--c-elevated) 100%);
+  }
+
   /* Report sections fade up as they arrive; visible by default if motion is off */
   .report-enter {
     animation: rise-in 360ms var(--ease-out-quint) both;

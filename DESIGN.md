@@ -153,7 +153,7 @@ A near-monochrome ink-and-paper base with exactly one identity color (green) and
 
 **The Verdict Rule.** Green, red, and amber appear only where they carry direction, rating, or risk. A gain or loss always also carries a `+`/`−` sign or word — color is never the sole signal.
 
-**The Untinted Paper Rule.** The light ground is pure `#ffffff`, chroma 0. Warmth is forbidden in the paper; identity lives in the green, the type, and the data.
+**The Atmospheric Ground Rule.** Paper *surfaces* stay near-neutral (white at the top of a raised panel's gradient), but the page **canvas** carries a faint brand-hued atmospheric lift (`--canvas`, ~5% green at top, fading out) so the ground reads as lit rather than dead-flat. The tint is the brand's own green, never warm/cream — warmth is still forbidden; identity lives in the green, the type, the data, and now a whisper of brand atmosphere behind it all.
 
 ## 3. Typography
 
@@ -174,21 +174,27 @@ A near-monochrome ink-and-paper base with exactly one identity color (green) and
 
 **The Tabular Rule.** Any number that sits in a column — price, score, percentage, lot — is mono with `tabular-nums`. Scores and grades align to fixed-width columns so the eye scans straight down.
 
-## 4. Elevation
+## 4. Elevation — Refined Depth
 
-Mostly flat, separated by hairlines — not a shadow-heavy system. Sections are divided by `border-t` rules and dotted leaders, never by stacked cards. Shadows are reserved for genuinely floating layers (dropdowns, popovers, modals) and stay soft and low.
+The surface is **layered, not flat**. Every real container carries a soft top-down gradient sheen, a low-opacity tinted shadow, and a 1px top edge highlight, so panels read as lit, dimensional surfaces lifting off an atmospheric ground — while the literate research feel (serif headings, dotted-leader rows, generous air) is preserved. Depth is *refined*: present and premium, never loud. Glassmorphism, neon glows, and heavy drop shadows remain out.
 
-In **night** mode, depth is carried by *surface*, not shadow: a black shadow is invisible on a black ground, so floating overlays switch to the lighter `elevated` surface (`#1b2026`) and a brighter hairline (`#2f353d`) to lift off the trading floor.
+The whole system is driven by tokens + two reusable classes in `index.css`, so depth is consistent app-wide and theme-aware:
 
-### Shadow Vocabulary
-- **Resting card** (`box-shadow: 0 1px 2px rgb(0 0 0 / 0.05)`): inputs and inline panels. Barely there.
-- **Floating menu** (`box-shadow: 0 12px 24px rgb(0 0 0 / 0.10)`): autocomplete dropdowns, the settings popover, the filters panel.
-- **Modal** (`box-shadow: 0 24px 48px rgb(0 0 0 / 0.20)`): the upload / confirm dialogs, over a dimmed backdrop.
+- **`--canvas`** — the body background. A radial gradient that lifts toward the top-center with a whisper of the brand hue (~5% light / ~9% dark), fading to the ground. The page reads as lit, not paper-flat. `background-attachment: fixed` so it stays put on scroll.
+- **`.surface-raised`** — resting panels (calendars, saved boxes, report containers, the verdict card's neighbors, secondary/quiet buttons). Gradient sheen + soft `--shadow-raised`, over the element's own `bg-paper`/`bg-elevated` and a `border-line` hairline.
+- **`.surface-float`** — floating layers (modals, popovers, dropdowns, the filters panel). Stronger gradient + layered `--shadow-float`.
+- **`.verdict-{pos,warn,neg}`** — the buy/hold answer surface: a diagonal wash from the verdict tint (top, behind the large display verdict) to the neutral surface (bottom, behind the dotted-leader rows) + a verdict-hued soft glow shadow. Color carries the verdict and the surface is dimensional, while muted Row labels stay on the light end of the gradient and keep WCAG AA contrast.
+
+### Depth Tokens (see `index.css`)
+- **`--shadow-raised`** (light): `0 1px 2px / 0.04, 0 6px 16px -5px / 0.08`, ink-tinted. Resting panels.
+- **`--shadow-float`** (light): `0 6px 14px -5px / 0.10, 0 22px 44px -12px / 0.18`. Floating layers.
+- **`--edge-highlight`**: `inset 0 1px 0 rgb(255 255 255 / .7)` (light) — the lit top edge.
+- Primary green buttons carry a vertical `brand → brand-deep` gradient plus a brand-hued glow shadow that intensifies on hover.
 
 ### Named Rules
-**The No-Card-Stack Rule.** Surfaces separate with hairlines and dotted leaders, not cards. Nested cards are forbidden everywhere. A report reads like a document, not a dashboard of tiles.
+**The No-Card-Stack Rule (still holds).** Surfaces gain depth, but a *report* still reads like a document: report facts are dotted-leader rows, not tiled stat cards, and cards are never nested inside cards. Depth is for genuine containers (panels, the verdict card, floating layers), not for tiling content into boxes.
 
-**The Surface-Over-Shadow Rule (night).** In dark mode, elevation is a lighter surface plus a brighter border — never a darker shadow. If an overlay looks glued to the ground at night, it's on `paper` when it should be on `elevated`.
+**The Surface-Over-Shadow Rule (night).** On the near-black ground a cast shadow is nearly invisible, so dark-mode elevation is carried by the lighter **surface gradient** (`--surface-raised` / `--surface-float` lift a step above the ground) plus the **top edge highlight** and a brighter hairline. A deep ambient shadow sits under floating layers only.
 
 ## 5. Components
 
@@ -230,14 +236,16 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 - **Do** carry `on-brand` (`#08130d`) text on every green fill; reach for `brand-strong` when green must be text. Never white on green.
 - **Do** keep color a verdict — green/red/amber only where direction, rating, or risk is meant, always paired with a `+`/`−` sign or word.
 - **Do** set every figure in IBM Plex Mono with `tabular-nums` and align scores/grades to fixed-width columns.
-- **Do** separate sections with hairlines and dotted leaders; keep the single centered `max-w-4xl` column.
-- **Do** lift night-mode overlays onto the `elevated` surface (`#1b2026`) with a brighter hairline, not a darker shadow.
-- **Do** keep the light ground pure `#ffffff` and let the green, type, and data carry identity.
+- **Do** separate report *sections* with hairlines and dotted leaders; keep the single centered `max-w-4xl` column.
+- **Do** give real containers depth via `.surface-raised` / `.surface-float` (gradient sheen + soft tinted shadow + edge highlight), not flat fills.
+- **Do** carry night-mode elevation with the lighter surface gradient + top edge highlight + brighter hairline; reserve deep ambient shadow for floating layers.
+- **Do** keep paper surfaces near-neutral and let the `--canvas` carry only a faint brand-green atmospheric lift — identity stays in the green, type, and data.
 
 ### Don't:
 - **Don't** reproduce **Bloomberg-terminal clutter** — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.
 - **Don't** drift into **crypto-hype aesthetics** — no neon glows, no gamified urgency, no gradient text.
 - **Don't** ship a **generic indigo SaaS dashboard** — the one accent is Stockbit green, never default Tailwind blue/indigo.
-- **Don't** stack or nest cards; don't tile the report into identical boxes.
-- **Don't** tint the paper warm or use a fluid `clamp()` display scale.
+- **Don't** nest cards inside cards or tile the report into identical stat boxes — depth is for genuine containers, not for boxing every fact.
+- **Don't** tint the ground *warm/cream* or use a fluid `clamp()` display scale (the only canvas tint allowed is the brand green).
+- **Don't** let depth get loud — no glassmorphism, neon glow, or heavy drop shadows; keep it the soft, refined layered system.
 - **Don't** rely on color alone, hover alone, or shadow alone to carry meaning.

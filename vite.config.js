@@ -52,6 +52,10 @@ export default defineConfig(({ mode }) => {
         target: 'https://api.anthropic.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/anthropic/, ''),
+        // Web search tool requests take 20-30s (multiple internal search rounds);
+        // raise the proxy timeout so the connection isn't killed mid-flight.
+        proxyTimeout: 90000,
+        timeout: 90000,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             if (claudeKey) proxyReq.setHeader('x-api-key', claudeKey)

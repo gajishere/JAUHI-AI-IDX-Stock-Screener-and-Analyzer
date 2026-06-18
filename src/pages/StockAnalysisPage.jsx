@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   BrokerScreenshotField,
+  FieldLabel,
   Pill,
   PrimaryButton,
   QuietButton,
@@ -16,10 +17,11 @@ import { Stepper } from '../components/Stepper';
 import { fetchChart, fetchFundamentals } from '../lib/marketData';
 import { buildAnalysisReport, formatPct, formatRp, formatRpCompact } from '../lib/analysis';
 import { searchEmiten, findEmiten, brokerContext, EMITEN_COUNT } from '../lib/universe';
-import { fetchTopBrokers, fetchBandarmology } from '../lib/idxApi';
+import { fetchTopBrokers, fetchBandarmologyRange } from '../lib/idxApi';
 import { IdxBadge } from '../components/IdxBadge';
 import { BrokerActionGauge, BrokerActionTable } from '../components/BrokerAction';
 import { claudeAIService } from '../lib/claudeAI';
+import { newsService } from '../lib/news';
 import { useLang, useT } from '../lib/i18n';
 
 // Signed percentage moves color by direction, not by assumption
@@ -36,6 +38,12 @@ const confidenceTone = (c) => {
   return v === 'high' ? 'pos' : v === 'low' ? 'neg' : 'warn';
 };
 
+// News sentiment reads the same way the headline sentiment pill does.
+const newsSentimentTone = (s) => {
+  const v = String(s || '').toLowerCase();
+  return v === 'positive' ? 'pos' : v === 'negative' ? 'neg' : 'warn';
+};
+
 const RISK_TONE = { high: 'neg', elevated: 'warn', moderate: 'muted', normal: 'muted' };
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -46,6 +54,153 @@ const accTone = (label) => {
   return 'text-warn';
 };
 
+// Verdict vocabulary shared by the buy/hold answer card. Maps each controlled
+// token to a tone, a localized display word, and a fallback headline used when
+// the AI call failed or returned an off-schema verdict.
+const VERDICT_TONE = { BUY: 'pos', HOLD: 'pos', WAIT: 'warn', TRIM: 'warn', AVOID: 'neg', SELL: 'neg' };
+const VERDICT_WORD = {
+  BUY: ['Buy', 'Beli'],
+  WAIT: ['Wait', 'Tunggu'],
+  AVOID: ['Avoid', 'Hindari'],
+  HOLD: ['Hold', 'Tahan'],
+  TRIM: ['Trim', 'Kurangi'],
+  SELL: ['Sell', 'Jual'],
+};
+
+// Tone-keyed styling for the verdict card so colors stay static (Tailwind can't
+// see runtime-built class names). The card surface IS the verdict tint — color
+// carries meaning, matching the system's "color is a verdict" rule — kept flat
+// (a hairline border, no shadow stack) per the elevation conventions.
+// The verdict surface is a diagonal gradient (defined in index.css as
+// .verdict-*): the verdict tint at the top behind the large display word, fading
+// to the neutral surface at the bottom behind the dotted-leader rows — so the
+// muted Row labels keep WCAG AA contrast while the card still reads as a lit,
+// colored, dimensional panel. A verdict-hued soft shadow lifts it off the page.
+const VERDICT_TONE_STYLE = {
+  pos: { word: 'text-pos', card: 'verdict-pos border-pos/30', dot: 'bg-pos' },
+  warn: { word: 'text-warn', card: 'verdict-warn border-warn/40', dot: 'bg-warn' },
+  neg: { word: 'text-neg', card: 'verdict-neg border-neg/30', dot: 'bg-neg' },
+};
+
+// When the AI verdict is missing/invalid, derive a sensible call from the locked
+// composite so the user still gets a direct answer.
+function deriveFallbackVerdict(intent, analysis) {
+  const r = analysis.overallRatings || {};
+  const short = r.shortTerm?.score ?? 5;
+  const mid = r.midTerm?.score ?? 5;
+  if (intent === 'buy') return short >= 6.5 ? 'BUY' : short >= 5 ? 'WAIT' : 'AVOID';
+  const avg = (short + mid) / 2;
+  return avg >= 6.5 ? 'HOLD' : avg >= 5 ? 'TRIM' : 'SELL';
+}
+
+// The headline answer to the user's question (buy-or-not / hold-or-sell). Reads
+// the AI verdict when present, falls back to the locked composite otherwise, and
+// always shows the concrete price levels (and live P&L for holders). Facts are
+// dotted-leader Rows — the report's typographic spine — never tiled cards.
+function VerdictCard({ intent, ai, analysis, positionPnl }) {
+  const t = useT();
+  const levels = analysis.levels || {};
+  const kl = analysis.keyLevels || {};
+  const close = analysis.close;
+
+  const validTokens = intent === 'buy' ? ['BUY', 'WAIT', 'AVOID'] : ['HOLD', 'TRIM', 'SELL'];
+  let verdict = String(ai?.verdict || '').toUpperCase().trim();
+  const fromAI = validTokens.includes(verdict);
+  if (!fromAI) verdict = deriveFallbackVerdict(intent, analysis);
+
+  const tone = VERDICT_TONE[verdict] || 'warn';
+  const style = VERDICT_TONE_STYLE[tone];
+  const word = VERDICT_WORD[verdict] ? t(VERDICT_WORD[verdict][0], VERDICT_WORD[verdict][1]) : verdict;
+
+  const question =
+    intent === 'buy'
+      ? t(`Should I buy ${analysis.ticker}?`, `Apakah saya beli ${analysis.ticker}?`)
+      : t(`Should I hold or sell ${analysis.ticker}?`, `Tahan atau jual ${analysis.ticker}?`);
+
+  // Upside from the as-of close to the nearest (short-term) target.
+  const upside = levels.targetShort != null && close ? (levels.targetShort - close) / close : null;
+  const pnlTone = positionPnl?.isProfit ? 'text-pos' : 'text-neg';
+
+  const headline =
+    (ai?.verdictHeadline || '').trim() ||
+    t('Based on the market data below.', 'Berdasarkan data pasar di bawah.');
+  const reason = (ai?.verdictReason || '').trim();
+  const guidance = (ai?.priceGuidance || '').trim();
+
+  return (
+    <div className={`rounded-2xl border p-6 sm:p-7 ${style.card}`}>
+      {/* Kicker sits on the strongest part of the verdict gradient, where the
+          muted token drops below AA — use a 70% ink so it clears 4.5:1 on the
+          full tint in both themes without going full-weight. */}
+      <p className="font-mono text-xs text-ink/70">
+        {t('your question', 'pertanyaan anda')}
+      </p>
+      <p className="mt-1 font-serif text-lg font-medium">{question}</p>
+
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className={`font-serif text-4xl font-medium tracking-tight sm:text-5xl ${style.word}`}>{word}</span>
+        <span className="text-sm text-ink">{headline}</span>
+      </div>
+
+      {/* Holder position — live unrealized P&L from the as-of close. */}
+      {intent === 'hold' && positionPnl && (
+        <div className="mt-5 grid gap-x-10 sm:grid-cols-2">
+          <Row label={t('Average entry', 'Entri rata-rata')} value={formatRp(positionPnl.entryPrice)} />
+          <Row label={t('Current price', 'Harga saat ini')} value={formatRp(close)} />
+          <Row label={t('Unrealized P&L', 'P&L belum terealisasi')} value={formatPct(positionPnl.pct)} tone={pnlTone} />
+          <Row
+            label={t('Unrealized value', 'Nilai belum terealisasi')}
+            value={positionPnl.quantity ? formatRp(positionPnl.amount) : '—'}
+            tone={positionPnl.quantity ? pnlTone : undefined}
+          />
+        </div>
+      )}
+
+      {/* Concrete price levels to act on. */}
+      <div className="mt-4 grid gap-x-10 border-t border-line/70 pt-4 sm:grid-cols-2">
+        {intent === 'buy' ? (
+          <>
+            <Row label={t('Ideal entry', 'Entri ideal')} value={kl.idealEntry} />
+            <Row label={t('Short-term target', 'Target jangka pendek')} value={kl.targetShortTerm} tone="text-pos" />
+            {upside != null && (
+              <Row label={t('Upside to target', 'Potensi naik ke target')} value={formatPct(upside)} tone="text-pos" />
+            )}
+            <Row label={t('Stop loss', 'Stop loss')} value={kl.stopLoss} tone="text-neg" />
+          </>
+        ) : (
+          <>
+            <Row label={t('Take profit', 'Ambil untung')} value={kl.targetShortTerm} tone="text-pos" />
+            <Row label={t('Cut loss', 'Batas rugi')} value={kl.stopLoss} tone="text-neg" />
+            <Row label={t('Break-even', 'Titik impas')} value={positionPnl ? formatRp(positionPnl.entryPrice) : '—'} />
+          </>
+        )}
+      </div>
+
+      {guidance && (
+        <p className="mt-5 max-w-prose text-sm leading-relaxed text-ink">
+          <span className="font-medium">{t('Price plan. ', 'Rencana harga. ')}</span>
+          {guidance}
+        </p>
+      )}
+      {reason && <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink">{reason}</p>}
+
+      <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-ink-muted">
+        {ai?.confidence && (
+          <Pill tone={confidenceTone(ai.confidence)}>
+            {t(`AI confidence: ${ai.confidence}`, `Keyakinan AI: ${ai.confidence}`)}
+          </Pill>
+        )}
+        <span className="inline-flex items-center gap-1.5">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
+          {fromAI
+            ? t('AI verdict, from the analysis below.', 'Putusan AI, dari analisis di bawah.')
+            : t('Derived from the composite score (AI commentary unavailable).', 'Berasal dari skor komposit (komentar AI tidak tersedia).')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function StockAnalysisPage() {
   const t = useT();
   const { lang } = useLang();
@@ -55,15 +210,15 @@ export default function StockAnalysisPage() {
       key: 'shortTerm',
       title: t('Short term', 'Jangka pendek'),
       horizon: t('days–week', 'hari–minggu'),
-      weights: t('Technical 45% · Flow 35% · Trend 20%', 'Teknikal 45% · Aliran 35% · Tren 20%'),
+      weights: t('Technical 35% · Flow 25% · Bandarmology 20% · Trend 10% · News 10%', 'Teknikal 35% · Aliran 25% · Bandarmologi 20% · Tren 10% · Berita 10%'),
     },
     {
       key: 'midTerm',
       title: t('Mid term', 'Jangka menengah'),
       horizon: t('week–month', 'minggu–bulan'),
       weights: t(
-        'Trend 35% · Technical 25% · Flow 20% · Fundamental 20%',
-        'Tren 35% · Teknikal 25% · Aliran 20% · Fundamental 20%',
+        'Trend 25% · Technical 15% · Flow 15% · Fundamental 15% · Bandarmology 20% · News 10%',
+        'Tren 25% · Teknikal 15% · Aliran 15% · Fundamental 15% · Bandarmologi 20% · Berita 10%',
       ),
     },
     {
@@ -71,19 +226,36 @@ export default function StockAnalysisPage() {
       title: t('Long term', 'Jangka panjang'),
       horizon: t('month–year+', 'bulan–tahun+'),
       weights: t(
-        'Fundamental 45% · Trend 30% · Technical 15% · Flow 10%',
-        'Fundamental 45% · Tren 30% · Teknikal 15% · Aliran 10%',
+        'Fundamental 40% · Trend 20% · Technical 10% · News 10% · Bandarmology 10% · Flow 10%',
+        'Fundamental 40% · Tren 20% · Teknikal 10% · Berita 10% · Bandarmologi 10% · Aliran 10%',
       ),
     },
   ];
-  const STEP_LABELS = [t('Select Stock', 'Pilih Saham'), t('Select Date', 'Pilih Tanggal')];
+  const STEP_LABELS = [t('Select Stock', 'Pilih Saham'), t('Select Date', 'Pilih Tanggal'), t('Your goal', 'Tujuan Anda')];
 
-  // stage: 'search' → 'date' → (upload modal) → 'report'
+  // News lookback window the user picks on the date step (1 / 3 / 6 months).
+  // The chosen range is passed to the news service; the classified sentiment
+  // becomes a full weighted pillar in the composite score (see TIMEFRAME_WEIGHTS
+  // in analysis.js).
+  const NEWS_WINDOWS = [
+    { value: 1, label: t('1 month', '1 bulan') },
+    { value: 3, label: t('3 months', '3 bulan') },
+    { value: 6, label: t('6 months', '6 bulan') },
+  ];
+
+  // stage: 'search' → 'date' → (intent modal) → 'buy' | 'hold' → 'report'
   const [stage, setStage] = useState('search');
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Intent flow: picking a date opens the intent modal; choosing an option
+  // routes to a tailored menu ('buy' = prospecting, 'hold' = already own it)
+  // that collects the remaining inputs before the analysis runs.
+  const [intentOpen, setIntentOpen] = useState(false);
+  const [intent, setIntent] = useState(null); // 'buy' | 'hold'
+  const [entryPrice, setEntryPrice] = useState(''); // holder's average buy price
+  const [quantity, setQuantity] = useState(''); // holder's share count
 
   const [ticker, setTicker] = useState('');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(TODAY);
   const [brokerScreenshots, setBrokerScreenshots] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [aiAnalysis, setAIAnalysis] = useState(null);
@@ -94,6 +266,8 @@ export default function StockAnalysisPage() {
   const [suggestedTickers, setSuggestedTickers] = useState([]);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [showFullReport, setShowFullReport] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
   // Live market-wide broker tape (IDX RapidAPI). Falls back to the bundled
   // reference session if the fetch fails or the key is unset. It is display-only
   // context and never enters the locked analysis score.
@@ -120,6 +294,16 @@ export default function StockAnalysisPage() {
   // it's available before buildAnalysisReport scores the Flow & liquidity pillar.
   const [bandar, setBandar] = useState(null);
   const [bandarLoading, setBandarLoading] = useState(false);
+
+  // News sentiment over the user-selected lookback window. Fetched in parallel
+  // with chart/fundamentals/bandarmology; the signed `score` nudges the Flow
+  // and Trend pillars (see buildAnalysisReport). A failed/disabled fetch
+  // degrades gracefully — the score runs without news, this section shows a
+  // muted note.
+  const [news, setNews] = useState(null);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState(null);
+  const [newsWindow, setNewsWindow] = useState(6);
 
   const selectedEmiten = findEmiten(ticker);
 
@@ -172,11 +356,31 @@ export default function StockAnalysisPage() {
     }
   };
 
-  // Choosing a date opens the (optional) screenshot step.
+  // Choosing a date opens the intent modal: do you already own this stock or not?
   const handlePickDate = (value) => {
     setDate(value);
     setUploadOpen(false);
+    setIntentOpen(true);
   };
+
+  // Intent chosen → route to the tailored menu where the answer is produced.
+  const chooseIntent = (which) => {
+    setIntent(which);
+    setIntentOpen(false);
+    setStage(which); // 'buy' | 'hold'
+  };
+
+  // Unrealized P&L for the holder path, computed locally from the average entry
+  // price, share count, and the as-of close — never trusted to the AI's math.
+  const positionPnl = (() => {
+    if (intent !== 'hold') return null;
+    const ep = Number(entryPrice);
+    const close = analysis?.close;
+    if (!ep || !Number.isFinite(ep) || close == null) return null;
+    const qty = Number(quantity) || 0;
+    const pct = (close - ep) / ep;
+    return { pct, amount: (close - ep) * qty, isProfit: close >= ep, entryPrice: ep, quantity: qty };
+  })();
 
   const addBrokerScreenshots = (incoming) => {
     setBrokerScreenshots((prev) => {
@@ -194,35 +398,62 @@ export default function StockAnalysisPage() {
     if (!code || !date || loading) return;
     setUploadOpen(false);
     setLoading(true);
+    setShowFullReport(false);
     setAnalysis(null);
     setAIAnalysis(null);
     setAIError(null);
     setError(null);
     setBandar(null);
+    setNews(null);
+    setNewsError(null);
     try {
-      const [chart, fundamentals] = await Promise.all([
-        fetchChart(code, '2y'),
-        fetchFundamentals(code),
-      ]);
       const emitenInfo = findEmiten(code);
 
-      // Bandarmology feeds the Flow & liquidity pillar (see flowScore in
-      // analysis.js), so it must be fetched before scoring — keyed off the
-      // actual as-of trading session, not the requested date (which may fall
-      // on a non-trading day). A fetch failure degrades gracefully: the score
-      // just falls back to the technical/volume-only flow read.
-      const asOfCandles = chart.candles.filter((c) => c.date <= date);
-      const asOfSession = asOfCandles[asOfCandles.length - 1]?.date ?? date;
-      let bandarResult = null;
+      // Fetch the chart first — bandarmology needs its as-of session to key the
+      // (ticker, date) call. Everything else (fundamentals, bandarmology, news)
+      // then runs in parallel so latency is the slowest leg, not the sum.
+      const chart = await fetchChart(code, '2y');
+
+      const [fundRes, bandarRes, newsRes] = await Promise.allSettled([
+        fetchFundamentals(code),
+        (async () => {
+          // Bandarmology is read over the trailing WEEK (W-1): the last 5
+          // trading sessions on or before the analysis date, aggregated
+          // client-side into one combined broker-flow read. Fetching each
+          // session separately (rather than trusting an undocumented ranged
+          // call) keeps the W-1 label truthful. A failure degrades gracefully:
+          // the score falls back to the technical/volume-only flow read.
+          const asOfCandles = chart.candles.filter((c) => c.date <= date);
+          const asOfSession = asOfCandles[asOfCandles.length - 1]?.date ?? date;
+          const tradingSessions = asOfCandles.map((c) => c.date);
+          try {
+            return await fetchBandarmologyRange(code, {
+              asOfDate: asOfSession,
+              tradingSessions,
+              sessionCount: 5,
+            });
+          } catch (err) {
+            console.error('IDX bandarmology range unavailable, falling back to flow without it:', err);
+            throw err;
+          }
+        })(),
+        newsService.fetchNewsSentiment(code, emitenInfo?.name, date, newsWindow, lang),
+      ]);
+
+      const fundamentals = fundRes.status === 'fulfilled' ? fundRes.value : null;
+
       setBandarLoading(true);
-      try {
-        bandarResult = await fetchBandarmology(code, { date: asOfSession });
-      } catch (err) {
-        console.error('IDX bandarmology unavailable, falling back to flow without it:', err);
-      } finally {
-        setBandarLoading(false);
-      }
+      const bandarResult = bandarRes.status === 'fulfilled' ? bandarRes.value : null;
       setBandar(bandarResult);
+      setBandarLoading(false);
+
+      setNewsLoading(true);
+      const newsResult = newsRes.status === 'fulfilled' ? newsRes.value : null;
+      setNews(newsResult);
+      if (newsRes.status === 'rejected') {
+        setNewsError(newsRes.reason?.message || t('News sentiment unavailable', 'Sentimen berita tidak tersedia'));
+      }
+      setNewsLoading(false);
 
       const analysisData = buildAnalysisReport({
         code,
@@ -231,13 +462,34 @@ export default function StockAnalysisPage() {
         fundamentals,
         emitenInfo,
         bandarmology: bandarResult,
+        news: newsResult,
       });
       setAnalysis(analysisData);
 
-      // Get AI-enhanced analysis
+      // Get AI-enhanced analysis, tailored to the user's intent (buy vs hold).
+      // For the holder path, precompute unrealized P&L from the as-of close so
+      // the AI reasons over the real position, not its own arithmetic.
+      const aiIntent =
+        intent === 'hold'
+          ? (() => {
+              const ep = Number(entryPrice);
+              const qty = Number(quantity) || 0;
+              const close = analysisData.close;
+              const pct = ep ? (close - ep) / ep : null;
+              return {
+                mode: 'hold',
+                entryPrice: ep,
+                quantity: qty,
+                pnl: ep ? { pct, amount: (close - ep) * qty, isProfit: close >= ep } : null,
+              };
+            })()
+          : intent === 'buy'
+            ? { mode: 'buy' }
+            : null;
+
       setAILoading(true);
       try {
-        const aiResult = await claudeAIService.getAIEnhancedAnalysis(code, analysisData, fundamentals, brokerScreenshots, bandarResult, lang);
+        const aiResult = await claudeAIService.getAIEnhancedAnalysis(code, analysisData, fundamentals, brokerScreenshots, bandarResult, lang, aiIntent);
         setAIAnalysis(aiResult);
       } catch (aiErr) {
         setAIError(aiErr.message || t('Failed to get AI analysis', 'Gagal mendapatkan analisis AI'));
@@ -254,8 +506,14 @@ export default function StockAnalysisPage() {
   };
 
   const startOver = () => {
+    setConfirmNew(false);
     setStage('search');
     setUploadOpen(false);
+    setIntentOpen(false);
+    setIntent(null);
+    setEntryPrice('');
+    setQuantity('');
+    setShowFullReport(false);
     setTicker('');
     setDate('');
     setBrokerScreenshots([]);
@@ -264,12 +522,14 @@ export default function StockAnalysisPage() {
     setSuggestedTickers([]);
     setActiveSuggestion(-1);
     setBandar(null);
+    setNews(null);
+    setNewsError(null);
   };
 
   const sentimentTone =
     analysis?.sentiment === 'Bullish' ? 'pos' : analysis?.sentiment === 'Bearish' ? 'neg' : 'warn';
 
-  const stepperCurrent = stage === 'date' ? 2 : 1;
+  const stepperCurrent = stage === 'buy' || stage === 'hold' ? 3 : stage === 'date' ? 2 : 1;
 
   return (
     <div className="flex flex-col">
@@ -313,7 +573,7 @@ export default function StockAnalysisPage() {
                 {suggestedTickers.length > 0 && (
                   <ul
                     role="listbox"
-                    className="dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5 text-left shadow-xl shadow-ink/10"
+                    className="surface-float dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5 text-left"
                   >
                     {suggestedTickers.map((s, index) => (
                       <li key={s.code} role="option" aria-selected={index === activeSuggestion}>
@@ -369,12 +629,126 @@ export default function StockAnalysisPage() {
                 )}
               </p>
 
-              <div className="mt-8 rounded-2xl border border-line bg-paper p-6 shadow-lg shadow-ink/5">
+              <div className="surface-raised mt-8 rounded-2xl border border-line bg-paper p-6">
                 <DatePicker inline value={date} max={TODAY} onChange={handlePickDate} />
               </div>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                <PrimaryButton onClick={runAnalysis} loading={loading}>
-                  {t('Analyze stock', 'Analisis saham')}
+
+              <p className="mt-5 text-xs text-ink-muted">
+                {t(
+                  'Pick a date to choose your goal next.',
+                  'Pilih tanggal untuk menentukan tujuan Anda berikutnya.',
+                )}
+              </p>
+            </section>
+          )}
+
+          {/* Step 3 — tailored menu by intent: 'buy' (prospecting) or 'hold'
+              (already own it). Each menu collects the remaining inputs and runs
+              the analysis, surfacing an intent-specific verdict on the report. */}
+          {(stage === 'buy' || stage === 'hold') && (
+            <section key={stage} className="stage-enter mx-auto mt-9 max-w-md text-center sm:mt-12">
+              <button
+                type="button"
+                onClick={() => {
+                  setStage('date');
+                  setIntentOpen(true);
+                }}
+                className="mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:scale-[1.02] active:scale-[0.95]"
+              >
+                <span className="text-ink-muted">‹ {t('Change goal', 'Ubah tujuan')}</span>
+                <span className="font-mono font-semibold">{ticker}</span>
+                <span className="hidden text-ink-muted sm:inline">· {date}</span>
+              </button>
+
+              <h2 className="font-serif text-3xl font-medium tracking-tight sm:text-4xl">
+                {stage === 'buy'
+                  ? t('Is it worth buying?', 'Layak dibeli?')
+                  : t('Hold or sell?', 'Tahan atau jual?')}
+              </h2>
+              <p className="mt-3 text-sm text-ink-muted">
+                {stage === 'buy'
+                  ? t(
+                      'The desk will judge whether to buy now, wait, or skip — and at what price.',
+                      'Meja riset akan menilai apakah beli sekarang, tunggu, atau lewati — dan di harga berapa.',
+                    )
+                  : t(
+                      'Enter your position so the desk can judge hold vs. sell and the right exit price.',
+                      'Masukkan posisi Anda agar meja riset dapat menilai tahan vs. jual dan harga keluar yang tepat.',
+                    )}
+              </p>
+
+              {/* Holder position inputs — average entry price + share count drive
+                  the live P&L and exit-price guidance on the verdict. */}
+              {stage === 'hold' && (
+                <div className="mt-7 grid gap-4 text-left sm:grid-cols-2">
+                  <div>
+                    <FieldLabel htmlFor="entry-price">{t('Average buy price (Rp)', 'Harga beli rata-rata (Rp)')}</FieldLabel>
+                    <input
+                      id="entry-price"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      value={entryPrice}
+                      onChange={(e) => setEntryPrice(e.target.value)}
+                      placeholder={t('e.g. 4500', 'mis. 4500')}
+                      className="w-full rounded-lg border border-line bg-paper px-4 py-3 font-mono text-base text-ink shadow-sm transition-colors placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="quantity">{t('Shares held', 'Jumlah saham')}</FieldLabel>
+                    <input
+                      id="quantity"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder={t('e.g. 1000', 'mis. 1000')}
+                      className="w-full rounded-lg border border-line bg-paper px-4 py-3 font-mono text-base text-ink shadow-sm transition-colors placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* News lookback window — how far back the AI web-searches for
+                  ticker news. The signed sentiment score is a weighted pillar.
+                  Centered to match the rest of the stage (header + actions). */}
+              <div className="mt-7">
+                <p className="text-sm font-medium">
+                  {t('News lookback window', 'Rentang berita')}
+                </p>
+                <p className="mx-auto mt-1 max-w-sm text-xs text-ink-muted">
+                  {t(
+                    'The AI web-searches ticker news over this window and classifies it as positive or negative.',
+                    'AI menelusuri berita saham dalam rentang ini dan mengklasifikasikannya sebagai positif atau negatif.',
+                  )}
+                </p>
+                <div role="radiogroup" aria-label={t('News lookback window', 'Rentang berita')} className="mt-3 inline-flex rounded-full border border-line bg-well/60 p-1">
+                  {NEWS_WINDOWS.map((w) => {
+                    const active = newsWindow === w.value;
+                    return (
+                      <button
+                        key={w.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setNewsWindow(w.value)}
+                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150 ${
+                          active
+                            ? 'bg-brand text-on-brand shadow-sm'
+                            : 'text-ink-muted hover:text-ink'
+                        }`}
+                      >
+                        {w.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+                <PrimaryButton onClick={runAnalysis} loading={loading} disabled={stage === 'hold' && !Number(entryPrice)}>
+                  {t('Get the verdict', 'Lihat putusan')}
                 </PrimaryButton>
                 <QuietButton onClick={() => setUploadOpen(true)}>
                   {brokerScreenshots.length > 0
@@ -386,10 +760,12 @@ export default function StockAnalysisPage() {
                 </QuietButton>
               </div>
               <p className="mt-3 text-xs text-ink-muted">
-                {t(
-                  'Screenshots are optional and can be attached before analyzing.',
-                  'Tangkapan layar bersifat opsional dan dapat dilampirkan sebelum analisis.',
-                )}
+                {stage === 'hold' && !Number(entryPrice)
+                  ? t('Enter your average buy price to continue.', 'Masukkan harga beli rata-rata untuk melanjutkan.')
+                  : t(
+                      'Screenshots are optional and can be attached before analyzing.',
+                      'Tangkapan layar bersifat opsional dan dapat dilampirkan sebelum analisis.',
+                    )}
               </p>
               {error && (
                 <div role="alert" className="mt-5 rounded-md border border-neg/30 bg-neg-tint px-4 py-3 text-left">
@@ -401,6 +777,56 @@ export default function StockAnalysisPage() {
           )}
         </div>
       )}
+
+      {/* Intent modal — opens right after a date is picked. Two clear options
+          route to the matching menu above. */}
+      <Modal
+        open={intentOpen}
+        onClose={() => setIntentOpen(false)}
+        title={t('What are you trying to decide?', 'Apa yang ingin Anda putuskan?')}
+        description={t(
+          `For ${ticker}${date ? ` · ${date}` : ''} — pick the one that fits you.`,
+          `Untuk ${ticker}${date ? ` · ${date}` : ''} — pilih yang sesuai dengan Anda.`,
+        )}
+      >
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={() => chooseIntent('hold')}
+            className="group flex items-start gap-4 rounded-xl border border-line bg-paper p-4 text-left shadow-[var(--shadow-raised)] transition-[transform,border-color,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-brand hover:bg-brand-tint/30 hover:shadow-[var(--shadow-float)] active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
+          >
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-strong transition-colors group-hover:bg-brand group-hover:text-on-brand">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13h4l3 7 4-14 3 7h4" />
+              </svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block font-serif text-lg font-medium">{t('I already own it', 'Saya sudah memilikinya')}</span>
+              <span className="mt-0.5 block text-sm text-ink-muted">
+                {t('Should I hold or sell — and at what price?', 'Sebaiknya tahan atau jual — dan di harga berapa?')}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => chooseIntent('buy')}
+            className="group flex items-start gap-4 rounded-xl border border-line bg-paper p-4 text-left shadow-[var(--shadow-raised)] transition-[transform,border-color,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-brand hover:bg-brand-tint/30 hover:shadow-[var(--shadow-float)] active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
+          >
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-strong transition-colors group-hover:bg-brand group-hover:text-on-brand">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14zM11 8v6M8 11h6" />
+              </svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block font-serif text-lg font-medium">{t("I don't own it yet", 'Saya belum memilikinya')}</span>
+              <span className="mt-0.5 block text-sm text-ink-muted">
+                {t('Is this stock worth buying or not?', 'Apakah saham ini layak dibeli atau tidak?')}
+              </span>
+            </span>
+          </button>
+        </div>
+      </Modal>
 
       {/* Step 3 — broker screenshot upload popup */}
       <Modal
@@ -444,9 +870,38 @@ export default function StockAnalysisPage() {
         <article className="report-enter">
           <div className="mb-8 flex items-center justify-between gap-4">
             <p className="font-mono text-xs text-ink-muted">{t('Analysis complete', 'Analisis selesai')}</p>
-            <QuietButton onClick={startOver}>{t('New analysis', 'Analisis baru')}</QuietButton>
+            <QuietButton onClick={() => setConfirmNew(true)}>{t('New analysis', 'Analisis baru')}</QuietButton>
           </div>
 
+          {/* Intent-tailored verdict — the direct answer to the user's question,
+              with the full analytical report expandable beneath it. */}
+          {intent && (
+            <VerdictCard intent={intent} ai={aiAnalysis} analysis={analysis} positionPnl={positionPnl} />
+          )}
+
+          {/* Toggle for the full report. When no intent was chosen (legacy path)
+              the report is always shown. */}
+          {intent && (
+            <button
+              type="button"
+              onClick={() => setShowFullReport((v) => !v)}
+              aria-expanded={showFullReport}
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink"
+            >
+              <svg
+                className={`h-4 w-4 transition-transform duration-200 ${showFullReport ? 'rotate-180' : ''}`}
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+              </svg>
+              {showFullReport
+                ? t('Hide full analysis', 'Sembunyikan analisis lengkap')
+                : t('View full analysis', 'Lihat analisis lengkap')}
+            </button>
+          )}
+
+          {(!intent || showFullReport) && (
+          <div className="report-enter mt-8">
           {/* Report masthead */}
           <header className="relative border-b border-line pb-6">
             <div className="relative flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
@@ -583,6 +1038,153 @@ export default function StockAnalysisPage() {
             </Section>
           )}
 
+          {/* News & sentiment — AI web-searches ticker news over the chosen
+              lookback window and classifies each finding. The signed score
+              folds into the Flow and Trend pillar ratings above. */}
+          {news && (
+            <Section
+              title={t('News & sentiment', 'Berita & sentimen')}
+              aside={
+                <span className="flex items-center gap-2">
+                  {analysis.news?.rating && (
+                    <RatingBadge rating={analysis.news.rating} />
+                  )}
+                  <Pill tone={newsSentimentTone(news.sentiment)} className="font-medium">
+                    {news.sentiment === 'positive'
+                      ? t('Positive', 'Positif')
+                      : news.sentiment === 'negative'
+                        ? t('Negative', 'Negatif')
+                        : t('Neutral', 'Netral')}
+                  </Pill>
+                  <Pill tone={confidenceTone(news.confidence)} className="font-medium">
+                    {(() => {
+                      const c = news.confidence?.toLowerCase();
+                      const word =
+                        c === 'high'
+                          ? t('High', 'Tinggi')
+                          : c === 'low'
+                            ? t('Low', 'Rendah')
+                            : t('Medium', 'Sedang');
+                      return t(`${word} confidence`, `Keyakinan ${word}`);
+                    })()}
+                  </Pill>
+                </span>
+              }
+            >
+              <div className="max-w-prose space-y-3">
+                {news.summary && (
+                  <p className="text-sm leading-relaxed text-ink">{news.summary}</p>
+                )}
+                {!news.summary && (
+                  <p className="text-sm leading-relaxed text-ink-muted">
+                    {t(
+                      'No material news was found for this ticker over the lookback window.',
+                      'Tidak ditemukan berita material untuk saham ini dalam rentang waktu terpilih.',
+                    )}
+                  </p>
+                )}
+
+                <div className="relative grid gap-x-12 pt-1 md:grid-cols-2">
+                  <Row
+                    label={t('Sentiment score', 'Skor sentimen')}
+                    value={`${news.score > 0 ? '+' : ''}${news.score.toFixed(2)}`}
+                    tone={news.score > 0 ? 'text-pos' : news.score < 0 ? 'text-neg' : undefined}
+                  />
+                  {analysis.news?.pillarScore != null && (
+                    <Row
+                      label={t('Pillar score', 'Skor pilar')}
+                      value={`${analysis.news.pillarScore.toFixed(1)} / 9.0`}
+                    />
+                  )}
+                  <Row
+                    label={t('Articles found', 'Artikel ditemukan')}
+                    value={String(news.articles.length)}
+                  />
+                  <Row
+                    label={t('Lookback window', 'Rentang waktu')}
+                    value={`${news.windowMonths} ${news.windowMonths === 1 ? t('month', 'bulan') : t('months', 'bulan')}`}
+                  />
+                  <Row
+                    label={t('As of', 'Per')}
+                    value={news.asOf}
+                  />
+                </div>
+
+                {news.articles.length > 0 && (
+                  <ul className="mt-2 space-y-2">
+                    {news.articles.map((a, i) => (
+                      <li key={i} className="rounded-md border border-line bg-paper/60 px-3 py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            {a.url ? (
+                              <a
+                                href={a.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium leading-snug text-ink hover:text-brand hover:underline"
+                              >
+                                {a.headline || t('(untitled)', '(tanpa judul)')}
+                              </a>
+                            ) : (
+                              <p className="text-sm font-medium leading-snug text-ink">
+                                {a.headline || t('(untitled)', '(tanpa judul)')}
+                              </p>
+                            )}
+                            <p className="mt-0.5 text-xs text-ink-muted">
+                              {a.source}
+                              {a.date ? ` · ${a.date}` : ''}
+                            </p>
+                            {a.impact && (
+                              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{a.impact}</p>
+                            )}
+                          </div>
+                          <Pill tone={newsSentimentTone(a.sentiment)} className="shrink-0">
+                            {a.sentiment === 'positive'
+                              ? t('Pos', 'Pos')
+                              : a.sentiment === 'negative'
+                                ? t('Neg', 'Neg')
+                                : t('Neu', 'Net')}
+                          </Pill>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="text-xs text-ink-muted">
+                  {t(
+                    'Sourced via Claude web search over the lookback window. Classified by the AI as price-positive, price-negative, or neutral; the signed score is a full weighted pillar in the composite rating.',
+                    'Diperoleh melalui pencarian web Claude dalam rentang terpilih. Diklasifikasikan AI sebagai positif, negatif, atau netral terhadap harga; skor bertanda menjadi pilar berbobot penuh dalam peringkat komposit.',
+                  )}
+                </p>
+              </div>
+            </Section>
+          )}
+          {newsLoading && (
+            <Section title={t('News & sentiment', 'Berita & sentimen')}>
+              <div className="flex items-center gap-3">
+                <span className="jauhi-scan" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="font-mono text-xs text-ink-muted">
+                  {t('AI is searching the web for news…', 'AI sedang menelusuri web untuk berita…')}
+                </span>
+              </div>
+            </Section>
+          )}
+          {newsError && !newsLoading && !news && (
+            <Section title={t('News & sentiment', 'Berita & sentimen')}>
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t(
+                  `News sentiment is unavailable (${newsError}). The report above is unaffected and scored from market data alone.`,
+                  `Sentimen berita tidak tersedia (${newsError}). Laporan di atas tidak terpengaruh dan dinilai murni dari data pasar.`,
+                )}
+              </p>
+            </Section>
+          )}
+
 
           {/* Essential sections - always visible */}
           <div className="space-y-6">
@@ -605,6 +1207,35 @@ export default function StockAnalysisPage() {
                         {overall.keyDriver}
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-ink-muted">{frame.weights}</p>
+
+                      {/* Per-pillar breakdown — each pillar's letter rating and its
+                          signed contribution to this timeframe's 1–10 score.
+                          Positive = lifting the rating, negative = dragging it. */}
+                      {overall.pillarBreakdown?.length > 0 && (
+                        <ul className="mt-3 space-y-1">
+                          {overall.pillarBreakdown.map((p) => {
+                            const absent = p.delta10 == null;
+                            const delta = p.delta10;
+                            const tone = absent ? 'text-ink-muted/40' : delta > 0.05 ? 'text-pos' : delta < -0.05 ? 'text-neg' : 'text-ink-muted';
+                            const sign = delta > 0 ? '+' : '';
+                            return (
+                              <li key={p.key} className={`flex items-center justify-between gap-2 text-xs${absent ? ' opacity-40' : ''}`}>
+                                <span className="flex min-w-0 items-baseline gap-2">
+                                  {absent ? (
+                                    <span className="inline-flex h-5 w-7 items-center justify-center rounded text-[10px] font-bold bg-surface-2 text-ink-muted">—</span>
+                                  ) : (
+                                    <RatingBadge rating={p.rating} />
+                                  )}
+                                  <span className="truncate text-ink-muted">{p.label}</span>
+                                </span>
+                                <span className={`shrink-0 font-mono tabular-nums ${tone}`}>
+                                  {absent ? '—' : `${sign}${delta.toFixed(2)}`}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </div>
                   );
                 })}
@@ -728,8 +1359,8 @@ export default function StockAnalysisPage() {
                   </div>
                   <p className="mt-3 max-w-prose text-xs text-ink-muted">
                     {t(
-                      'Per-ticker foreign and broker flows are not in the public price feed; this section reads participation from on-balance volume and traded value instead.',
-                      'Aliran asing dan broker per-saham tidak tersedia di data harga publik; bagian ini membaca partisipasi dari on-balance volume dan nilai transaksi.',
+                      'Participation is read from on-balance volume and traded value. Broker accumulation/distribution is scored in its own Bandarmology (W-1) pillar.',
+                      'Partisipasi dibaca dari on-balance volume dan nilai transaksi. Akumulasi/distribusi broker dinilai pada pilar Bandarmologi (W-1) tersendiri.',
                     )}
                   </p>
                 </Section>
@@ -787,11 +1418,16 @@ export default function StockAnalysisPage() {
                 </p>
               </Section>
 
-              {/* Bandarmology section */}
+              {/* Bandarmology section — read over the trailing week (W-1) */}
               {bandarLoading ? (
                 <Section
-                  title={t('Bandarmology · broker accumulation','Bandarmologi · akumulasi broker')}
-                  aside={bandar ? <IdxBadge date={bandar.date} /> : null}
+                  title={t('Bandarmology · broker accumulation · W-1','Bandarmologi · akumulasi broker · W-1')}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      {analysis.bandarmology?.rating && <RatingBadge rating={analysis.bandarmology.rating} />}
+                      {bandar ? <IdxBadge date={bandar.date} /> : null}
+                    </span>
+                  }
                 >
                   <div className="flex items-center gap-3">
                     <span className="jauhi-scan" aria-hidden="true">
@@ -799,14 +1435,36 @@ export default function StockAnalysisPage() {
                       <span />
                       <span />
                     </span>
-                    <span className="font-mono text-xs text-ink-muted">{t('Loading bandarmology...', 'Memuat bandarmologi...')}</span>
+                    <span className="font-mono text-xs text-ink-muted">{t('Loading weekly bandarmology...', 'Memuat bandarmologi mingguan...')}</span>
                   </div>
                 </Section>
               ) : bandar && !bandar.empty ? (
                 <Section
-                  title={t('Bandarmology · broker accumulation','Bandarmologi · akumulasi broker')}
-                  aside={<IdxBadge date={bandar.date} />}
+                  title={t('Bandarmology · broker accumulation · W-1','Bandarmologi · akumulasi broker · W-1')}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      {analysis.bandarmology?.rating && <RatingBadge rating={analysis.bandarmology.rating} />}
+                      <IdxBadge date={bandar.date} />
+                    </span>
+                  }
                 >
+                    {/* W-1 range notice — shows how many sessions were aggregated
+                        and the inclusive date span of the trailing week. */}
+                    {bandar.range && bandar.dateSpan && (
+                      <div className="mb-4 flex items-center gap-2 rounded-md border border-info/30 bg-info-tint/40 px-3 py-2">
+                        <svg className="h-3.5 w-3.5 shrink-0 text-info" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="2" y="3" width="12" height="11" rx="1.5" />
+                          <path d="M2 6h12M5 1.5v3M11 1.5v3" strokeLinecap="round" />
+                        </svg>
+                        <p className="text-xs text-info">
+                          {t(
+                            `Aggregated over ${bandar.sessions} trading session${bandar.sessions === 1 ? '' : 's'} (${bandar.dateSpan.from} → ${bandar.dateSpan.to}).`,
+                            `Dikumpulkan dari ${bandar.sessions} sesi transaksi${bandar.sessions === 1 ? '' : 's'} (${bandar.dateSpan.from} → ${bandar.dateSpan.to}).`,
+                          )}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Headline accumulation/distribution read */}
                     <div className="flex items-baseline gap-3">
                       <span className="font-mono text-xs text-ink-muted">{t('Accumulation/Distribution', 'Akumulasi/Distribusi')}</span>
@@ -822,25 +1480,30 @@ export default function StockAnalysisPage() {
                       <div className="grid gap-x-6 sm:grid-cols-2">
                         <Row label={t('Top-5 stance', 'Sifat 5 teratas')} value={bandar.top5Accdist} />
                         <Row label={t('Net value of top 5', 'Nilai net 5 teratas')} value={formatRpCompact(bandar.top5NetValue)} />
-                        <Row label={t('Buyers vs sellers', 'Pembeli vs penjual')} value={`${bandar.totalBuyers} / ${bandar.totalSellers}`} />
-                        <Row label={t('Session value', 'Nilai sesi')} value={formatRpCompact(bandar.sessionValue)} />
+                        <Row label={t('Buyers vs sellers', 'Pembeli vs penjual')} value={`${bandar.totalBuyers ?? '—'} / ${bandar.totalSellers ?? '—'}`} />
+                        <Row label={t('Week value', 'Nilai mingguan')} value={formatRpCompact(bandar.sessionValue)} />
                       </div>
 
                       <p className="text-xs text-ink-muted">
                         {t(
-                          'Per-ticker broker accumulation/distribution from the IDX API — folded into the Flow & liquidity pillar above.',
-                          'Akumulasi/distribusi broker per-saham dari IDX API — turut membentuk pilar Aliran & likuiditas di atas.'
+                          'Weekly broker accumulation/distribution (W-1) from the IDX API — scored as its own pillar (net flow conviction, top-5 concentration, foreign direction).',
+                          'Akumulasi/distribusi broker mingguan (W-1) dari IDX API — dinilai sebagai pilar tersendiri (keyakinan aliran net, konsentrasi 5 teratas, arah asing).'
                         )}
                       </p>
                     </div>
                   </Section>
               ) : bandar && bandar.empty ? (
                 <Section
-                  title={t('Bandarmology · broker accumulation','Bandarmologi · akumulasi broker')}
-                  aside={bandar ? <IdxBadge date={bandar.date} /> : null}
+                  title={t('Bandarmology · broker accumulation · W-1','Bandarmologi · akumulasi broker · W-1')}
+                  aside={
+                    <span className="flex items-center gap-2">
+                      {analysis.bandarmology?.rating && <RatingBadge rating={analysis.bandarmology.rating} />}
+                      {bandar ? <IdxBadge date={bandar.date} /> : null}
+                    </span>
+                  }
                 >
                   <p className="max-w-prose text-sm text-ink-muted">
-                    {t('No broker-summary data for this session.','Tidak ada data ringkasan broker untuk sesi ini.')}
+                    {t('No broker-summary data for the trailing week.','Tidak ada data ringkasan broker untuk minggu terakhir.')}
                   </p>
                 </Section>
               ) : null}
@@ -918,8 +1581,26 @@ export default function StockAnalysisPage() {
               </Section>
             </div>
           </div>
+          </div>
+          )}
         </article>
       )}
+
+      {/* ===== Confirm new analysis ===== */}
+      <Modal
+        open={confirmNew}
+        onClose={() => setConfirmNew(false)}
+        title={t('Start a new analysis?', 'Mulai analisis baru?')}
+        description={t(
+          'This will clear the current report, uploaded screenshots, and all unsaved data.',
+          'Ini akan menghapus laporan saat ini, tangkapan layar yang diunggah, dan semua data yang belum disimpan.',
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <QuietButton onClick={() => setConfirmNew(false)}>{t('Cancel', 'Batal')}</QuietButton>
+          <PrimaryButton onClick={startOver}>{t('Start new analysis', 'Mulai analisis baru')}</PrimaryButton>
+        </div>
+      </Modal>
     </div>
   );
 }

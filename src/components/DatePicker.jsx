@@ -271,7 +271,7 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
       {isOpen && (
         <div
           ref={popupRef}
-          className="absolute z-dropdown mt-2 w-full max-w-xs rounded-md border border-line bg-elevated shadow-lg shadow-ink/5"
+          className="surface-float absolute z-dropdown mt-2 w-full max-w-xs rounded-md border border-line bg-elevated"
         >
           {calendarBody}
         </div>

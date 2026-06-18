@@ -206,7 +206,7 @@ function WhyNotRecommended({ date, filters, results }) {
         {suggestions.length > 0 && (
           <ul
             role="listbox"
-            className="dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5 shadow-xl shadow-ink/10"
+            className="surface-float dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5"
           >
             {suggestions.map((s, index) => (
               <li key={s.code} role="option" aria-selected={index === active}>
@@ -241,7 +241,7 @@ function WhyNotRecommended({ date, filters, results }) {
       {err && !loading && <p className="mt-4 text-sm text-neg">{err}</p>}
 
       {diag && !loading && (
-        <div className="mt-5 max-w-md rounded-xl border border-line p-4">
+        <div className="surface-raised mt-5 max-w-md rounded-xl border border-line p-4">
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-sm font-semibold text-ink">{diag.ticker}</p>
             <Pill tone={tone}>
@@ -298,7 +298,7 @@ export default function StockScreeningPage() {
   const [numStocks, setNumStocks] = useState(5);
   const [analysisMode, setAnalysisMode] = useState('closing');
   const [category, setCategory] = useState(DEFAULT_CATEGORY);
-  const [capTier, setCapTier] = useState('every');
+  const [capTier, setCapTier] = useState([]);
   const [sector, setSector] = useState('');
   const [boardRiskFilter, setBoardRiskFilter] = useState('');
 
@@ -346,7 +346,7 @@ export default function StockScreeningPage() {
   const activeFilterCount =
     (category !== DEFAULT_CATEGORY ? 1 : 0) +
     (analysisMode !== 'closing' ? 1 : 0) +
-    (capTier !== 'every' ? 1 : 0) +
+    (capTier.length > 0 ? 1 : 0) +
     (sector ? 1 : 0) +
     (boardRiskFilter ? 1 : 0);
 
@@ -805,7 +805,7 @@ export default function StockScreeningPage() {
               <button
                 type="button"
                 onClick={() => setDateModalOpen(true)}
-                className="mt-7 inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-brand px-8 text-base font-medium text-on-brand shadow-lg shadow-brand/20 transition-[transform,opacity] duration-200 hover:bg-brand-deep hover:shadow-xl hover:shadow-brand/25 hover:scale-[1.02] active:scale-[0.95] sm:mt-8"
+                className="mt-7 inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-brand bg-gradient-to-b from-brand to-brand-deep px-8 text-base font-medium text-on-brand shadow-[0_6px_20px_-6px_color-mix(in_srgb,var(--c-brand)_60%,transparent)] transition-[background-image,box-shadow,transform,opacity] duration-200 hover:from-brand-deep hover:to-brand-deep hover:shadow-[0_13px_32px_-8px_color-mix(in_srgb,var(--c-brand)_74%,transparent)] hover:scale-[1.02] active:scale-[0.95] sm:mt-8"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
@@ -822,7 +822,7 @@ export default function StockScreeningPage() {
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   aria-expanded={filtersOpen}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
+                  className="surface-raised inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-[color,border-color,transform,box-shadow] hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
@@ -839,7 +839,7 @@ export default function StockScreeningPage() {
                   <>
                     {/* click-away */}
                     <div className="fixed inset-0 z-dropdown" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                    <div className="dropdown-enter absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-elevated p-5 text-left shadow-xl shadow-ink/10">
+                    <div className="surface-float dropdown-enter absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-elevated p-5 text-left">
                       <div className="space-y-4">
                         <div className="space-y-1.5">
                           <FieldLabel htmlFor="category-filter">{t('Strategy', 'Strategi')}</FieldLabel>
@@ -908,18 +908,34 @@ export default function StockScreeningPage() {
                         <div className="space-y-1.5">
                           <FieldLabel>{t('Market cap', 'Kapitalisasi pasar')}</FieldLabel>
                           <div className="flex flex-wrap gap-1 rounded-lg border border-line p-1">
-                            {CAP_TIERS.map((tier) => (
-                              <button
-                                key={tier.id}
-                                type="button"
-                                onClick={() => setCapTier(tier.id)}
-                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                                  capTier === tier.id ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                } hover:scale-[1.02] active:scale-[0.95]`}
-                              >
-                                {tier.label}
-                              </button>
-                            ))}
+                            {CAP_TIERS.map((tier) => {
+                              const active =
+                                tier.id === 'every'
+                                  ? capTier.length === 0
+                                  : capTier.includes(tier.id);
+                              return (
+                                <button
+                                  key={tier.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (tier.id === 'every') {
+                                      setCapTier([]);
+                                    } else {
+                                      setCapTier((prev) =>
+                                        prev.includes(tier.id)
+                                          ? prev.filter((x) => x !== tier.id)
+                                          : [...prev, tier.id],
+                                      );
+                                    }
+                                  }}
+                                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                    active ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
+                                  } hover:scale-[1.02] active:scale-[0.95]`}
+                                >
+                                  {tier.label}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -965,7 +981,7 @@ export default function StockScreeningPage() {
               </div>
 
                 {savedScreenings.length > 0 && (
-                  <div className="mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
+                  <div className="surface-raised mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
                     <p className="text-sm font-medium">{t('Saved screenings', 'Penyaringan tersimpan')}</p>
                     <ul className="mt-3 space-y-2">
                       {savedScreenings.slice(0, 5).map((s) => (
@@ -1238,7 +1254,7 @@ export default function StockScreeningPage() {
             </div>
 
             {/* Refine step — attach broker summaries to re-rank */}
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line p-5">
+            <div className="surface-raised mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line p-5">
               <div className="max-w-prose">
                 <p className="text-sm font-medium">
                   {reranked

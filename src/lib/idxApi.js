@@ -193,6 +193,190 @@ async function fetchBandarmologyUncached(code, date) {
   };
 }
 
+// Merge several single-session bandarmology payloads into one aggregate object
+// with the SAME shape as a single-day result, so every downstream consumer
+// (bandarmologyScoreComponent, the UI sections, the broker table) works
+// unchanged. This is the client-side W-1 aggregation path: it's deterministic
+// and honest regardless of whether the IDX endpoint would aggregate a date
+// range itself (which is undocumented).
+//
+// Aggregation rules:
+//  - Net value per broker is summed across sessions, then re-ranked, so the
+//    "top buyers/sellers" reflect the whole week, not one noisy session.
+//  - totalBuyers / totalSellers / sessionValue / top5NetValue are summed.
+//  - accdist / top5Accdist are re-derived from the summed buyer vs seller
+//    totals (the API's per-day string codes can't be meaningfully averaged).
+//  - Rows with no net activity after summing are dropped.
+//  - `sessions` records how many trading sessions actually contributed, and
+//    `dateSpan` gives the inclusive first..last session dates for display.
+export function aggregateBandarmology(results) {
+  const sessions = results.filter((r) => r && !r.empty);
+  if (sessions.length === 0) {
+    // All sessions empty — return a single-day-shaped empty marker so callers
+    // that check `.empty` still degrade gracefully.
+    return {
+      live: true,
+      ticker: sessions[0]?.ticker ?? null,
+      date: null,
+      empty: true,
+      accdist: null,
+      top5Accdist: null,
+      top5NetValue: 0,
+      totalBuyers: null,
+      totalSellers: null,
+      sessionValue: 0,
+      topBuyers: [],
+      topSellers: [],
+      buyRows: [],
+      sellRows: [],
+      sessions: 0,
+      dateSpan: null,
+      range: true,
+    };
+  }
+
+  const ticker = sessions[0].ticker;
+
+  // Sum net value per broker code on each side, keyed by `${code}|${foreign}`.
+  // buyRows/sellRows carry lot + avg price too; lots are summed and the avg
+  // is value-weighted across sessions so it stays representative.
+  const buyMap = new Map();
+  const sellMap = new Map();
+  let sessionValue = 0;
+  let totalBuyers = 0;
+  let totalSellers = 0;
+
+  for (const r of sessions) {
+    sessionValue += r.sessionValue ?? 0;
+    if (r.totalBuyers != null) totalBuyers += r.totalBuyers;
+    if (r.totalSellers != null) totalSellers += r.totalSellers;
+
+    for (const row of r.buyRows ?? []) {
+      const k = `${row.code}|${row.foreign ? 1 : 0}`;
+      const prev = buyMap.get(k) ?? { code: row.code, foreign: row.foreign, value: 0, lot: 0, valueForAvg: 0 };
+      prev.value += row.value ?? 0;
+      prev.lot += row.lot ?? 0;
+      // Track value for a value-weighted average price.
+      prev.valueForAvg += (row.value ?? 0) * (row.avg ?? 0);
+      buyMap.set(k, prev);
+    }
+    for (const row of r.sellRows ?? []) {
+      const k = `${row.code}|${row.foreign ? 1 : 0}`;
+      const prev = sellMap.get(k) ?? { code: row.code, foreign: row.foreign, value: 0, lot: 0, valueForAvg: 0 };
+      prev.value += row.value ?? 0;
+      prev.lot += row.lot ?? 0;
+      prev.valueForAvg += (row.value ?? 0) * (row.avg ?? 0);
+      sellMap.set(k, prev);
+    }
+  }
+
+  const finalize = (m) =>
+    [...m.values()]
+      .map((r) => ({ ...r, avg: r.value > 0 ? r.valueForAvg / r.value : 0 }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value);
+  const buyRows = finalize(buyMap);
+  const sellRows = finalize(sellMap);
+
+  // The lightweight top-buyers/sellers shape (code · foreign · value).
+  const topBuyers = buyRows.slice(0, 5).map((r) => ({ code: r.code, foreign: r.foreign, value: r.value }));
+  const topSellers = sellRows.slice(0, 5).map((r) => ({ code: r.code, foreign: r.foreign, value: r.value }));
+
+  // Re-derive accdist from the week's summed buyer vs seller values. The API
+  // string codes ("Acc"/"Big Acc"/"Dist") can't be averaged across days, so a
+  // magnitude-based read is the honest aggregate. Same code prefix convention
+  // so accTone()/bandarmologyScoreComponent keep matching on "acc"/"dist".
+  const totalBuyValue = buyRows.reduce((a, b) => a + b.value, 0);
+  const totalSellValue = sellRows.reduce((a, b) => a + b.value, 0);
+  const netFlow = totalBuyValue - totalSellValue;
+  const denom = totalBuyValue + totalSellValue;
+  const netRatio = denom > 0 ? netFlow / denom : 0;
+  const accdist = deriveAccdist(netRatio);
+  const top5NetValue = topBuyers.reduce((a, b) => a + b.value, 0) - topSellers.reduce((a, b) => a + b.value, 0);
+
+  const dates = sessions.map((r) => r.date).filter(Boolean).sort();
+  const dateSpan = dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null;
+
+  return {
+    live: true,
+    ticker,
+    // `date` keeps the latest session so IdxBadge etc. show the most recent
+    // trading day; dateSpan carries the full inclusive range.
+    date: dateSpan?.to ?? null,
+    empty: buyRows.length === 0 && sellRows.length === 0,
+    accdist,
+    top5Accdist: accdist, // same derived read for the top-5 stance
+    top5NetValue,
+    totalBuyers: totalBuyers > 0 ? totalBuyers : null,
+    totalSellers: totalSellers > 0 ? totalSellers : null,
+    sessionValue,
+    topBuyers,
+    topSellers,
+    buyRows,
+    sellRows,
+    sessions: sessions.length,
+    dateSpan,
+    range: true,
+  };
+}
+
+// Map a net buyer/seller ratio (-1..+1) onto the IDX accdist code convention.
+// Symmetric bands so the read is consistent with the per-session codes the UI
+// already colors (acc → bullish, dist → bearish).
+function deriveAccdist(netRatio) {
+  if (netRatio >= 0.3) return 'Big Acc';
+  if (netRatio > 0.05) return 'Acc';
+  if (netRatio <= -0.3) return 'Big Dist';
+  if (netRatio < -0.05) return 'Dist';
+  return 'Netral';
+}
+
+// Fetch bandarmology over the trailing `sessionCount` trading sessions ending
+// at (or before) `asOfDate`, aggregating client-side into a single W-1-style
+// read. `tradingSessions` is the list of available session date strings (from
+// the chart candles) on/before `asOfDate`; we fetch the last `sessionCount` of
+// them. Falls back gracefully: if fewer sessions exist, it uses what's there;
+// if every fetch fails, it resolves to an empty aggregate so callers degrade.
+//
+// Memoized per (ticker, joined-session-key) so repeated calls for the same
+// week are instant.
+const rangeCache = new Map();
+
+export function fetchBandarmologyRange(ticker, { asOfDate, tradingSessions, sessionCount = 5 } = {}) {
+  const code = String(ticker || '').trim().toUpperCase();
+  if (!code || !asOfDate) {
+    return Promise.reject(new Error('Bandarmology range needs a ticker and an as-of date'));
+  }
+  if (!Array.isArray(tradingSessions) || tradingSessions.length === 0) {
+    return Promise.reject(new Error('Bandarmology range needs the available trading sessions'));
+  }
+
+  // Resolve the trailing N sessions on or before the as-of date.
+  const onOrBefore = tradingSessions.filter((d) => d <= asOfDate).sort();
+  const window = onOrBefore.slice(-Math.max(1, Math.min(sessionCount, onOrBefore.length)));
+
+  const cacheKey = `${code}|${window.join(',')}`;
+  const cached = rangeCache.get(cacheKey);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    // Fetch each session in parallel; the shared serial throttle in idxFetch
+    // keeps us under the BASIC plan's ~1 req/s ceiling, so this resolves in
+    // roughly window.length × ~1.2s. Each failure degrades independently.
+    const settled = await Promise.allSettled(window.map((d) => fetchBandarmology(code, { date: d })));
+    const results = settled
+      .filter((s) => s.status === 'fulfilled')
+      .map((s) => s.value);
+    if (results.length === 0) {
+      throw new Error('Every bandarmology session in the window failed');
+    }
+    return aggregateBandarmology(results);
+  })();
+  rangeCache.set(cacheKey, pending);
+  pending.catch(() => rangeCache.delete(cacheKey));
+  return pending;
+}
+
 // Live health check for the IDX proxy: a real round-trip through /idx ->
 // api/idx.js -> RapidAPI, so "configured" reflects the server-side
 // IDX_RAPIDAPI_KEY rather than anything visible to the browser.

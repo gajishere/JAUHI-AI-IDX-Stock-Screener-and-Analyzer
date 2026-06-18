@@ -4,7 +4,7 @@
 
 import { fetchSymbolChart, fetchFundamentals } from './marketData.js';
 import { buildScreeningScore, formatRpCompact, formatPct } from './analysis.js';
-import { fetchBandarmology } from './idxApi.js';
+import { fetchBandarmology, fetchBandarmologyRange } from './idxApi.js';
 import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory, capTierBounds } from './screeningCategories.js';
@@ -43,10 +43,9 @@ function compactText(text, max = 1200) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
-// Check if API key is configured
-const isConfigured = () => {
-  return !!API_KEY && API_KEY.trim() !== '';
-};
+// Key is injected server-side by the Vite proxy; from the browser's perspective
+// the service is always configured — a bad key surfaces as a 401 from the proxy.
+const isConfigured = () => true;
 
 setAIConfigured(isConfigured());
 
@@ -501,7 +500,7 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
     const { shortlist, universeSize, candidateCount } = await scanUniverse(date, {
       count,
       category,
-      capTier: filters.capTier ?? 'every',
+      capTier: filters.capTier ?? [],
       sector: filters.sector ?? '',
       boardLevel: filters.boardLevel ?? '',
       range,
@@ -603,19 +602,27 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
     }));
 
     // Bandarmology re-score — only the surfaced top-N hit the throttled (~1 req/s)
-    // IDX API, so this is ≤ count calls instead of one per shortlisted name. Each
-    // is fetched for its own last-trade session (cached, so the analysis page
-    // reuses it), folded into the score so it becomes part of the displayed
-    // rating, and attached for the candidate row's Acc/Dist pill.
+    // IDX API, so this is ≤ count names instead of one per shortlisted name.
+    // Each is read over the trailing WEEK (W-1): the last 5 trading sessions are
+    // fetched and aggregated client-side, folded into the score so it becomes
+    // part of the displayed rating, and attached for the candidate row's Acc/Dist
+    // pill. The as-of session was already pre-warmed above, so the range fetch
+    // only incurs the ~4 extra sessions per name.
     finalCandidates = await Promise.all(
       finalCandidates.map(async (c) => {
         const rescore = rescoreByTicker.get(c.ticker);
         if (!rescore) return c;
         let bandar = null;
         try {
-          bandar = await fetchBandarmology(c.ticker, { date: rescore.asOfSession });
+          bandar = await fetchBandarmologyRange(c.ticker, {
+            asOfDate: rescore.asOfSession,
+            tradingSessions: (rescore.chart?.candles ?? [])
+              .filter((cd) => cd.date <= rescore.asOfSession)
+              .map((cd) => cd.date),
+            sessionCount: 5,
+          });
         } catch (e) {
-          console.warn(`Bandarmology fetch failed for ${c.ticker}:`, e.message);
+          console.warn(`Bandarmology range fetch failed for ${c.ticker}:`, e.message);
         }
         if (!bandar || bandar.empty) return c; // no broker rows — keep bandar-free score
         let rescored;
@@ -712,11 +719,19 @@ export const diagnoseStock = async (code, date, filters = {}, recommended = []) 
 
   const cap = score.marketCap;
 
-  // Cap-tier selector.
-  if (filters.capTier && filters.capTier !== 'every') {
-    const t = capTierBounds(filters.capTier);
-    const ok = cap != null && (t.min == null || cap >= t.min) && (t.max == null || cap < t.max);
-    checks.push({ label: `In the ${t.label} band`, ok, detail: formatRpCompact(cap) });
+  // Cap-tier selector (supports multiple selected tiers).
+  const selectedTiers = Array.isArray(filters.capTier)
+    ? filters.capTier.filter((id) => id !== 'every')
+    : filters.capTier && filters.capTier !== 'every'
+    ? [filters.capTier]
+    : [];
+  if (selectedTiers.length > 0) {
+    const inAnyTier = selectedTiers.some((id) => {
+      const t = capTierBounds(id);
+      return cap != null && (t.min == null || cap >= t.min) && (t.max == null || cap < t.max);
+    });
+    const tierLabels = selectedTiers.map((id) => capTierBounds(id).label).join(' or ');
+    checks.push({ label: `Cap: ${tierLabels}`, ok: inAnyTier, detail: formatRpCompact(cap) });
   }
 
   // JAUHI bank / blue-chip (only when the category enforces it).

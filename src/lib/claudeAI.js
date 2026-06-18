@@ -1,5 +1,5 @@
 // Claude AI service for enhanced stock analysis
-import { finishAIActivity, recordAIEvent, setAIConfigured, startAIActivity } from './aiSession';
+import { finishAIActivity, setAIConfigured, startAIActivity } from './aiSession';
 import { formatRpCompact } from './analysis';
 
 const evidenceNote = 'This is an evidence and rationale summary generated from app inputs and model outputs, not hidden chain-of-thought.';
@@ -174,14 +174,52 @@ class ClaudeAIService {
     };
   }
 
+  // Build the intent-specific block + JSON schema fragment for the AI prompt.
+  // intent.mode is 'buy' (user does NOT own the stock) or 'hold' (user owns it
+  // at intent.entryPrice × intent.quantity, with intent.pnl precomputed by the
+  // caller). Returns the directive text and the controlled verdict tokens so the
+  // page can render a tailored verdict card. Falls back to a neutral generic
+  // brief when no intent is supplied.
+  buildIntentDirective(intent, context) {
+    if (!intent || (intent.mode !== 'buy' && intent.mode !== 'hold')) {
+      return {
+        section: '',
+        verdictTokens: 'BUY | WAIT | AVOID | HOLD | SELL | TRIM',
+        verdictHelp: 'Your single-word call on the stock.',
+      };
+    }
+
+    if (intent.mode === 'buy') {
+      return {
+        section: `TRADER INTENT: The user does NOT own ${context.ticker} yet. They want a direct answer to ONE question: "Is this worth buying right now, or should I wait — and at what price?"
+- Decide BUY (worth entering at or near current levels), WAIT (good stock but wait for a better price/setup — name the trigger), or AVOID (not worth buying now).
+- Be concrete about the entry zone and the invalidation (stop) level. Tie the call to the technical setup, trend, flow/bandarmology, and any news catalyst.`,
+        verdictTokens: 'BUY | WAIT | AVOID',
+        verdictHelp: 'BUY = enter now/near here; WAIT = good name, wait for a named trigger; AVOID = do not buy now.',
+      };
+    }
+
+    // hold
+    const pnl = intent.pnl || {};
+    return {
+      section: `TRADER INTENT: The user ALREADY OWNS ${context.ticker}. Position: average entry Rp ${Number(intent.entryPrice || 0).toLocaleString()} × ${Number(intent.quantity || 0).toLocaleString()} share(s). At the current price Rp ${context.currentPrice.toLocaleString()} the position is ${pnl.isProfit ? 'UP' : 'DOWN'} ${pnl.pct != null ? `${(pnl.pct * 100).toFixed(2)}%` : 'n/a'} (unrealized ${pnl.amount != null ? `Rp ${Math.round(pnl.amount).toLocaleString()}` : 'n/a'}).
+They want a direct answer to ONE question: "Should I hold or sell this — and at what price?"
+- Decide HOLD (keep the full position, with the level that would change your mind), TRIM (take partial profit / reduce risk — say how much and at what price), or SELL (exit — say why and around what price).
+- Reference their entry price and current P&L explicitly. Give a concrete take-profit target and a stop/cut-loss level. Tie it to the technical setup, trend, flow/bandarmology, and any news catalyst.`,
+      verdictTokens: 'HOLD | TRIM | SELL',
+      verdictHelp: 'HOLD = keep full position; TRIM = reduce/take partial profit; SELL = exit the position.',
+    };
+  }
+
   // Generate AI-enhanced analysis
-  async getAIEnhancedAnalysis(ticker, analysisData, fundamentals, brokerScreenshots = [], bandar = null, language = 'en') {
+  async getAIEnhancedAnalysis(ticker, analysisData, fundamentals, brokerScreenshots = [], bandar = null, language = 'en', intent = null) {
     if (!this.isConfigured()) {
       throw new Error('Claude API key not configured. Please set CLAUDE_API_KEY in .env.');
     }
 
     const context = this.prepareAnalysisContext(ticker, analysisData, fundamentals);
     const imageBlocks = await prepareImageBlocks(brokerScreenshots);
+    const intentDirective = this.buildIntentDirective(intent, context);
     const promptText = `
             You are an expert Indonesian stock market analyst. Provide enhanced insights for the following stock analysis data:
 
@@ -240,7 +278,9 @@ class ClaudeAIService {
               ? `${imageBlocks.length} uploaded broker screenshot(s) are attached after this text. Read them and incorporate any visible broker flow, accumulation/distribution, order-book, or foreign activity evidence. If the image text is unclear, say so rather than inventing details.`
               : 'No broker screenshots were uploaded.'}
 
-            BANDARMOLY (IDX API - Per-ticker broker accumulation/distribution):
+            ${intentDirective.section}
+
+            BANDARMOLOGY (IDX API - Per-ticker broker accumulation/distribution):
             ${bandar && !bandar.empty
               ? `Accumulation/Distribution: ${bandar.accdist}
                Top-5 Stance: ${bandar.top5Accdist}
@@ -263,6 +303,10 @@ class ClaudeAIService {
             Keep the response concise, professional, and focused on actionable insights for Indonesian retail traders.
             Format your response as JSON with these fields:
             {
+              "verdict": "string",
+              "verdictHeadline": "string",
+              "verdictReason": "string",
+              "priceGuidance": "string",
               "summary": "string",
               "additionalConsiderations": "string",
               "confidence": "string",
@@ -270,7 +314,9 @@ class ClaudeAIService {
               "actionableTip": "string",
               "brokerScreenshotRead": "string"
             }
-            The "confidence" value MUST be exactly one of: High, Medium, Low (in English), regardless of the response language. All other string values follow the RESPONSE LANGUAGE instruction above.
+            The "verdict" value MUST be exactly one of these English tokens: ${intentDirective.verdictTokens}. (${intentDirective.verdictHelp})
+            "verdictHeadline" = one short sentence directly answering the user's question. "verdictReason" = 2-3 sentences justifying the verdict from the analysis. "priceGuidance" = the specific price levels to act on (entry zone / take-profit / stop), as a short phrase.
+            The "confidence" value MUST be exactly one of: High, Medium, Low (in English), regardless of the response language. The "verdict" token also stays English. All other string values follow the RESPONSE LANGUAGE instruction above.
             `;
     const activityId = startAIActivity({
       source: 'Stock Analysis',
@@ -335,7 +381,7 @@ class ClaudeAIService {
 
       const data = await response.json();
       const content = data.content?.[0]?.text ?? '';
-      const parsed = this.extractJSON(content);
+      const parsed = extractJSON(content, this.parseTextResponse(''));
       finishAIActivity(activityId, {
         source: 'Stock Analysis',
         title: 'AI insight received',
@@ -386,29 +432,6 @@ class ClaudeAIService {
         error,
       });
       throw error;
-    }
-  }
-
-  // Claude often wraps JSON in ```json fences or surrounding prose; pull the
-  // object out before parsing, and fall back to a text summary if all else fails.
-  extractJSON(text) {
-    if (!text) return this.parseTextResponse('');
-    let body = text.trim();
-    const fenced = body.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    if (fenced) body = fenced[1].trim();
-    const start = body.indexOf('{');
-    const end = body.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      try {
-        return JSON.parse(body.slice(start, end + 1));
-      } catch {
-        // fall through to plain parse / text fallback
-      }
-    }
-    try {
-      return JSON.parse(body);
-    } catch {
-      return this.parseTextResponse(text);
     }
   }
 
@@ -512,7 +535,7 @@ ${languageDirective(language)} (Ticker codes stay as-is.)`;
       }
       const data = await response.json();
       const content = data.content?.[0]?.text ?? '';
-      const parsed = this.extractJSON(content);
+      const parsed = extractJSON(content, {});
       finishAIActivity(activityId, {
         source: 'Stock Screening',
         title: 'AI framework received',
@@ -582,12 +605,42 @@ ${languageDirective(language)} (Ticker codes stay as-is.)`;
   // Fallback parser if Claude doesn't return valid JSON
   parseTextResponse(text) {
     return {
+      verdict: '',
+      verdictHeadline: '',
+      verdictReason: '',
+      priceGuidance: '',
       summary: text.substring(0, 200) + '...',
       additionalConsiderations: 'See full analysis for details.',
       confidence: 'Medium',
       confidenceReasoning: 'Based on standard technical and fundamental analysis.',
       actionableTip: 'Monitor volume confirmation for breakout signals.'
     };
+  }
+}
+
+// Claude often wraps JSON in ```json fences or surrounding prose; pull the
+// object out before parsing, and fall back to a text summary if all else fails.
+// Exported so the news service (and any future AI surface) reuses the same
+// resilient parser instead of each rolling its own. Module-level (not a class
+// method) so it can be imported directly without the singleton instance.
+export function extractJSON(text, fallback) {
+  if (!text) return fallback ?? {};
+  let body = text.trim();
+  const fenced = body.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) body = fenced[1].trim();
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(body.slice(start, end + 1));
+    } catch {
+      // fall through to plain parse / text fallback
+    }
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return fallback ?? { summary: text.substring(0, 200) + '...' };
   }
 }
 

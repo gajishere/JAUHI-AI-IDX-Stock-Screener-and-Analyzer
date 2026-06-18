@@ -93,34 +93,124 @@ function obvDelta(candles, period = 20) {
 }
 
 // Convert bandarmology accdist string to a numeric score component
+// Flow-pillar contribution from bandarmology. With the W-1 client-side
+// aggregate the signal is richer than a single session, so this scores four
+// real dimensions instead of just the accdist flag + broker count:
+//   1. accdist headline        — derived from the week's net buy/sell ratio
+//   2. net flow conviction     — week's net value as a share of week's total
+//   3. top-5 concentration     — how much of the net move is big money
+//   4. foreign flow direction  — foreigners net buying (positive tailwind)
+// Each adds a bounded signed adjustment; the total clamps to ±2. Returns 0
+// when bandar is null/empty so the Flow score degrades to volume/OBV only.
+// (Now also the basis for the standalone Bandarmology pillar — see bandarScore.)
 function bandarmologyScoreComponent(bandar) {
-  if (!bandar) return 0;
+  if (!bandar || bandar.empty) return 0;
 
-  // Convert accdist reading to a score adjustment
+  let s = 0;
+
+  // 1. accdist headline — directional base. "big" codes carry twice the weight
+  // of plain acc/dist. Matches on "acc"/"dist" the same way accTone() does.
   const accdist = bandar.accdist?.toLowerCase() || '';
-  let scoreAdjustment = 0;
+  if (accdist.includes('big') && accdist.includes('acc')) s += 1.8;
+  else if (accdist.includes('big') && accdist.includes('dist')) s -= 1.8;
+  else if (accdist.includes('acc')) s += 1.2;
+  else if (accdist.includes('dist')) s -= 1.2;
 
-  // The IDX API returns short codes ("Acc" / "Big Acc" / "Dist"), not the full
-  // words — match on "acc"/"dist" the same way accTone() does, not "accum"
-  // (which "Acc" can never contain and silently never matched).
-  if (accdist.includes('acc')) {
-    // Accumulation is positive
-    scoreAdjustment = 1.5;
-  } else if (accdist.includes('dist')) {
-    // Distribution is negative
-    scoreAdjustment = -1.5;
+  // 2. Net flow conviction — the week's net (buy − sell) value as a share of
+  // the week's total traded value. This is the conviction measure the old
+  // broker-COUNT ratio couldn't capture (10 small buyers ≠ 1 whale). A ±10%
+  // net ratio is treated as full conviction; in between it scales linearly.
+  const weekValue = numFinite(bandar.sessionValue) ? bandar.sessionValue : 0;
+  const totalBuy = sumForeign(bandar.buyRows, false) + sumForeign(bandar.buyRows, true);
+  const totalSell = sumForeign(bandar.sellRows, false) + sumForeign(bandar.sellRows, true);
+  const totalBoth = totalBuy + totalSell;
+  if (totalBoth > 0) {
+    const netRatio = (totalBuy - totalSell) / totalBoth;
+    const conviction = Math.max(-1, Math.min(1, netRatio / 0.1)); // ±10% = full
+    s += conviction * 0.9; // up to ±0.9 from conviction alone
+  } else if (weekValue > 0 && numFinite(bandar.top5NetValue)) {
+    // Fall back to the precomputed top-5 net when the full tape isn't present
+    // (e.g. a single-day legacy payload). Still a real magnitude signal.
+    const netRatio = Math.max(-1, Math.min(1, bandar.top5NetValue / (weekValue * 0.5)));
+    s += netRatio * 0.6;
   }
 
-  // Modify based on buyer/seller ratio if available
-  if (bandar.totalBuyers !== null && bandar.totalSellers !== null &&
-      (bandar.totalBuyers + bandar.totalSellers) > 0) {
-    const ratio = bandar.totalBuyers / (bandar.totalBuyers + bandar.totalSellers);
-    // Ratio of 0.5 is neutral, >0.5 is bullish, <0.5 is bearish
-    scoreAdjustment += (ratio - 0.5) * 2; // Scale to roughly -1 to +1
+  // 3. Top-5 concentration — if the net move is concentrated among the top 5
+  // brokers, it's institutional and more likely to persist. Reward magnitude of
+  // the top-5 net relative to the week's total value; cap the contribution.
+  if (weekValue > 0 && numFinite(bandar.top5NetValue)) {
+    const concRatio = Math.max(-1, Math.min(1, bandar.top5NetValue / weekValue));
+    s += concRatio * 0.4;
   }
 
-  // Clamp the adjustment to reasonable bounds
-  return Math.max(-2, Math.min(2, scoreAdjustment));
+  // 4. Foreign flow — foreigners net buying is a well-known IDX tailwind.
+  // Uses the fuller buyRows/sellRows tape; absent on legacy single-day shapes.
+  const foreignNet = foreignNetValue(bandar);
+  if (totalBoth > 0 && foreignNet !== null) {
+    const fRatio = Math.max(-1, Math.min(1, foreignNet / totalBoth));
+    s += fRatio * 0.5;
+  }
+
+  return Math.max(-2, Math.min(2, s));
+}
+
+function numFinite(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Sum the `value` field across rows, optionally filtered to foreign brokers.
+function sumForeign(rows, foreign) {
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((a, r) => (r && r.foreign === foreign ? a + (Number(r.value) || 0) : a), 0);
+}
+
+// Net (buy − sell) value attributable to foreign brokers across the tape.
+// Returns null if the rows aren't present (legacy payloads), so callers can
+// skip the foreign term gracefully.
+function foreignNetValue(bandar) {
+  if (!Array.isArray(bandar.buyRows) || !Array.isArray(bandar.sellRows)) return null;
+  return sumForeign(bandar.buyRows, true) - sumForeign(bandar.sellRows, true);
+}
+
+// Bandarmology pillar — scores the W-1 broker read on the same internal
+// 0.5–9 scale as the other pillars. Reuses the rich bandarmologyScoreComponent
+// (accdist + net flow conviction + top-5 concentration + foreign direction)
+// and scales its ±2 adjustment onto the pillar range so a confirmed
+// accumulation week reads clearly bullish and a distribution week clearly
+// bearish. The raw ±2 is multiplied by 1.5 before adding to the neutral 4.5,
+// so a maxed signal reaches ~7.5 (clearly acc) or ~1.5 (clearly dist) — a
+// "soft" pillar that can't single-handedly max or floor the composite.
+// Returns null when bandar is missing/empty, so the composite renormalizes
+// the remaining pillars and the locked score degrades gracefully.
+function bandarScore(bandar) {
+  if (!bandar || bandar.empty) return null;
+  const component = bandarmologyScoreComponent(bandar);
+  return clampScore(4.5 + component * 1.5);
+}
+
+// News sentiment pillar — scores the AI-classified news read on the same
+// internal 0.5–9 scale as the other pillars. The AI returns a signed score
+// (-1..+1) plus a confidence token (high/medium/low); this maps the pair onto
+// the pillar range so news carries weight in the composite like any other
+// signal, not just a nudge on Flow/Trend.
+//
+// Mapping: the AI's |score| × confidence weight sets how far from neutral
+// (4.5) the pillar moves, capped so news alone can never max or floor the
+// pillar — it stays a "soft" pillar relative to hard price/flow data. High
+// confidence + strong direction → up to ~7.5 (clearly bullish) or ~1.5
+// (clearly bearish); thin/contradictory news → stays near neutral.
+function newsScore(news) {
+  if (!news || news.score == null) return null; // missing pillar → renormalize
+  const raw = Number(news.score);
+  if (!Number.isFinite(raw)) return null;
+  const magnitude = Math.min(1, Math.abs(raw));
+  const conf = String(news.confidence || '').toLowerCase();
+  const confMul = conf === 'high' ? 1 : conf === 'low' ? 0.4 : 0.7;
+  // Max ±3.0 from neutral — meaningful but not enough to dominate alone.
+  const offset = magnitude * confMul * 3.0;
+  const s = 4.5 + (raw >= 0 ? offset : -offset);
+  return clampScore(s);
 }
 
 function returnOver(closes, sessions) {
@@ -245,7 +335,9 @@ function trendScore(ind) {
   return clampScore(s);
 }
 
-function flowScore(ind, bandarmology = null) {
+// Each signed term that builds the Flow pillar, with a stable i18n-friendly
+// key + a human label. Retained for reference / potential future surfacing;
+function flowScore(ind) {
   let s = 4.5;
   if (ind.volumeRatio > 1.15) s += 1;
   else if (ind.volumeRatio < 0.85) s -= 1;
@@ -254,9 +346,9 @@ function flowScore(ind, bandarmology = null) {
   else if (ind.avgValueTraded20 < 1e9) s -= 0.75;
   if (ind.dayChange > 0 && ind.volumeRatio > 1) s += 0.5;
 
-  // Add bandarmology component if available
-  s += bandarmologyScoreComponent(bandarmology);
-
+  // NOTE: bandarmology is now its own weighted pillar (see bandarScore +
+  // TIMEFRAME_WEIGHTS), so it is intentionally NOT folded in here to avoid
+  // double-counting.
   return clampScore(s);
 }
 
@@ -320,12 +412,21 @@ const PILLAR_LABELS = {
   trend: 'Trend',
   flow: 'Flow & liquidity',
   fundamental: 'Fundamental',
+  news: 'News & sentiment',
+  bandarmology: 'Bandarmology (W-1)',
 };
 
+// Composite weights per timeframe, now spanning six pillars. Bandarmology (the
+// weekly broker accumulation/distribution read) is weighted heaviest on the
+// short horizon — broker positioning moves price fast — and lightest on the
+// long horizon, where fundamentals dominate multi-quarter returns. Weights
+// within each frame sum to 1.0; compositeRatings renormalizes if a pillar is
+// missing (news/bandarmology fetch failed/disabled), so the locked score
+// degrades gracefully.
 const TIMEFRAME_WEIGHTS = {
-  shortTerm: { technical: 0.45, flow: 0.35, trend: 0.2 },
-  midTerm: { trend: 0.35, technical: 0.25, flow: 0.2, fundamental: 0.2 },
-  longTerm: { fundamental: 0.45, trend: 0.3, technical: 0.15, flow: 0.1 },
+  shortTerm: { technical: 0.35, flow: 0.25, trend: 0.1, news: 0.1, bandarmology: 0.2 },
+  midTerm: { trend: 0.25, technical: 0.15, flow: 0.15, fundamental: 0.15, news: 0.1, bandarmology: 0.2 },
+  longTerm: { fundamental: 0.4, trend: 0.2, technical: 0.1, news: 0.1, bandarmology: 0.1, flow: 0.1 },
 };
 
 export function compositeRatings(pillars) {
@@ -333,33 +434,72 @@ export function compositeRatings(pillars) {
   for (const [frame, weights] of Object.entries(TIMEFRAME_WEIGHTS)) {
     let total = 0;
     let weightSum = 0;
-    let keyDriver = null;
-    let bestContribution = -Infinity;
+    // First pass: gather the present pillars and sum their raw weighted score
+    // so we can compute the effective (renormalized) weight for each.
+    const present = [];
     for (const [pillar, weight] of Object.entries(weights)) {
       const score = pillars[pillar];
       if (score == null) continue; // missing pillar -> renormalize the rest
       total += score * weight;
       weightSum += weight;
-      if (score * weight > bestContribution) {
-        bestContribution = score * weight;
-        keyDriver = PILLAR_LABELS[pillar];
-      }
+      present.push({ pillar, weight, score });
     }
+
     const score = weightSum > 0 ? total / weightSum : 0;
-    // `score` stays on the internal scale — the narrative/action text below
-    // is tuned against it. `score10` is the public 1–10 figure shown in the UI.
     const score10 = toScoreTen(score);
-    out[frame] = { score, score10, rating: ratingFromScore(score10), keyDriver };
+
+    // Per-pillar signed contribution to the public 1–10 score, measured against
+    // a neutral baseline (4.5 internal = 5.7 on the 1–10 scale). Because the
+    // internal 0.5–9 range maps to 1–10 via toScoreTen, one internal point is
+    // worth 9/8.5 ≈ 1.06 public points; multiplying the pillar's deviation from
+    // neutral by its effective weight gives a delta in 1–10 units that sums
+    // (approximately) to (score10 − 5.7). Positive = lifting the rating, negative
+    // = dragging it. Deltas are rounded so the UI reads cleanly.
+    const INTERNAL_TO_PUBLIC = 9 / (SCORE_CEIL - SCORE_FLOOR);
+    const NEUTRAL_INTERNAL = 4.5;
+    const presentKeys = new Set(present.map((p) => p.pillar));
+    const absent = Object.keys(weights)
+      .filter((k) => !presentKeys.has(k))
+      .map((k) => ({ key: k, label: PILLAR_LABELS[k], weight: null, score10: null, rating: null, delta10: null }));
+
+    const pillarBreakdown = [
+      ...present
+        .map((p) => {
+          const effectiveWeight = weightSum > 0 ? p.weight / weightSum : 0;
+          const delta10 = (p.score - NEUTRAL_INTERNAL) * effectiveWeight * INTERNAL_TO_PUBLIC;
+          const score10Pillar = toScoreTen(p.score);
+          return {
+            key: p.pillar,
+            label: PILLAR_LABELS[p.pillar],
+            weight: effectiveWeight,
+            score10: score10Pillar,
+            rating: ratingFromScore(score10Pillar),
+            delta10: Number(delta10.toFixed(2)),
+          };
+        })
+        .sort((a, b) => Math.abs(b.delta10) - Math.abs(a.delta10)),
+      ...absent,
+    ];
+
+    // keyDriver = the pillar with the largest positive contribution (matches the
+    // original "biggest contributor" semantics; falls back to largest-magnitude
+    // if everything is negative).
+    const keyDriver =
+      pillarBreakdown.find((p) => p.delta10 >= 0)?.label ?? pillarBreakdown[0]?.label ?? null;
+
+    out[frame] = { score, score10, rating: ratingFromScore(score10), keyDriver, pillarBreakdown };
   }
   return out;
 }
 
-export function scorePillars(ind, fundamentals, context = {}, bandarmology = null) {
+export function scorePillars(ind, fundamentals, context = {}, bandarmology = null, news = null) {
   return {
     technical: technicalScore(ind),
     trend: trendScore(ind),
-    flow: flowScore(ind, bandarmology),
+    flow: flowScore(ind),
     fundamental: fundamentalScore(fundamentals, context),
+    news: newsScore(news),
+    bandarmology: bandarScore(bandarmology),
   };
 }
 
@@ -433,11 +573,11 @@ function actionText(ind, ratings) {
 
 // ---------- report builder ----------
 
-export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology }) {
+export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology, news }) {
   const ind = computeIndicators(chart, requestedDate);
   const cap = marketCap(emitenInfo, ind.close);
   const risk = boardRisk(emitenInfo?.board);
-  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology);
+  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology, news);
   const ratings = compositeRatings(pillars);
 
   const sentimentScore = (ratings.shortTerm.score + ratings.midTerm.score) / 2;
@@ -507,6 +647,29 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
       volumeTrend,
       rating: ratingFromScore(toScoreTen(pillars.trend)),
     },
+    news:
+      news && pillars.news != null
+        ? {
+            sentiment: news.sentiment,
+            score: news.score,
+            confidence: news.confidence,
+            // Pillar score on the internal scale + its public rating, so the
+            // News section can show a RatingBadge like the other pillars and
+            // the composite already weighted it in via TIMEFRAME_WEIGHTS.
+            pillarScore: pillars.news,
+            rating: ratingFromScore(toScoreTen(pillars.news)),
+            contributing: true,
+          }
+        : null,
+    bandarmology:
+      bandarmology && !bandarmology.empty && pillars.bandarmology != null
+        ? {
+            accdist: bandarmology.accdist,
+            pillarScore: pillars.bandarmology,
+            rating: ratingFromScore(toScoreTen(pillars.bandarmology)),
+            contributing: true,
+          }
+        : null,
     overallRatings: ratings,
     briefRationale: rationaleText(ind, pillars, fundamentals),
     actionRecommendations: actionText(ind, ratings),
@@ -520,15 +683,32 @@ export function buildAnalysisReport({ code, requestedDate, chart, fundamentals, 
       targetMidTerm: formatRp(Math.max(ind.high3m, ind.resistance)),
       targetLongTerm: formatRp(chart.fiftyTwoWeekHigh ?? Math.max(ind.high3m, ind.resistance)),
     },
+    // Raw numeric levels — same values that feed the formatted keyLevels above,
+    // exposed unrounded so the buy/hold verdict cards can compute P&L, upside,
+    // and distance-to-stop without re-parsing the display strings.
+    levels: {
+      close: ind.close,
+      support: ind.support,
+      resistance: ind.resistance,
+      stopLoss: Math.round(ind.support * 0.97),
+      entryLow: ind.support,
+      entryHigh:
+        ind.vwap20 != null && ind.vwap20 > ind.support && ind.vwap20 < ind.close
+          ? ind.vwap20
+          : ind.close,
+      targetShort: ind.resistance,
+      targetMid: Math.max(ind.high3m, ind.resistance),
+      targetLong: chart.fiftyTwoWeekHigh ?? Math.max(ind.high3m, ind.resistance),
+    },
   };
 }
 
 // Compact scoring used by the screening page.
-export function buildScreeningScore({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology }) {
+export function buildScreeningScore({ code, requestedDate, chart, fundamentals, emitenInfo, bandarmology, news }) {
   const ind = computeIndicators(chart, requestedDate);
   const cap = marketCap(emitenInfo, ind.close);
   const risk = boardRisk(emitenInfo?.board);
-  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology);
+  const pillars = scorePillars(ind, fundamentals, { risk, cap }, bandarmology, news);
   const ratings = compositeRatings(pillars);
   // Weighted on the internal scale (matching each frame's narrative scoring),
   // then converted once to the public 1–10 figure shown in the screening table.

@@ -33,6 +33,20 @@ export function capTierBounds(id) {
   return CAP_TIERS.find((t) => t.id === id) ?? CAP_TIERS[0];
 }
 
+// Union span of multiple tier IDs. Returns {min, max} safe for pre-filtering:
+// null min means no floor, null max means no ceiling.
+export function capTiersBounds(ids) {
+  const list = Array.isArray(ids) ? ids : ids ? [ids] : [];
+  if (!list.length || list.includes('every')) return { min: null, max: null };
+  const bounds = list.map((id) => capTierBounds(id));
+  const mins = bounds.map((b) => b.min).filter((v) => v != null);
+  const maxs = bounds.map((b) => b.max).filter((v) => v != null);
+  return {
+    min: mins.length === bounds.length ? Math.min(...mins) : null,
+    max: maxs.length === bounds.length ? Math.max(...maxs) : null,
+  };
+}
+
 const pct = (v) => (v == null ? 'n/a' : formatPct(v));
 const num = (v, d = 1) => (v == null ? 'n/a' : v.toFixed(d));
 const xVal = (v, d = 1) => (v == null ? 'n/a' : `${v.toFixed(d)}x`);
@@ -44,7 +58,7 @@ export const CATEGORIES = [
     id: 'bluechip',
     label: 'Blue Chip & High Liquidity',
     blurb:
-      'Top-tier, deeply liquid names (LQ45/IDX30 territory). Safe for larger capital — overrides the usual bank/blue-chip exclusion.',
+      'Top-tier, deeply liquid names (LQ45/IDX30 territory). Safe for larger capital — overrides the usual bank/blue-chip exclusion. · Estimated time ~14s.',
     tier1: 'size', // rank the universe by size/structure, not raw momentum
     jauhi: false, // the whole point — surface the blue chips JAUHI normally drops
     fundamentals: true, // for ROA
@@ -63,7 +77,7 @@ export const CATEGORIES = [
   {
     id: 'value',
     label: 'Value Investing',
-    blurb: 'Fundamentally sound but cheap: low P/E and P/BV, healthy ROE, modest debt.',
+    blurb: 'Fundamentally sound but cheap: low P/E and P/BV, healthy ROE, modest debt. · Estimated time ~13s.',
     tier1: 'size',
     jauhi: true,
     fundamentals: true,
@@ -88,7 +102,7 @@ export const CATEGORIES = [
   {
     id: 'growth',
     label: 'Growth',
-    blurb: 'Rapid expanders: strong net-profit and revenue growth, high ROE, with room for expansion debt.',
+    blurb: 'Rapid expanders: strong net-profit and revenue growth, high ROE, with room for expansion debt. · Estimated time ~12s.',
     tier1: 'size',
     jauhi: true,
     fundamentals: true,
@@ -111,7 +125,7 @@ export const CATEGORIES = [
   {
     id: 'dividend',
     label: 'Dividend Hunter',
-    blurb: 'Passive income: high yield with a sustainable payout ratio, backed by positive earnings.',
+    blurb: 'Passive income: high yield with a sustainable payout ratio, backed by positive earnings. · Estimated time ~12s.',
     tier1: 'size',
     jauhi: true,
     fundamentals: true,
@@ -133,7 +147,7 @@ export const CATEGORIES = [
   {
     id: 'momentum',
     label: 'Momentum / Swing',
-    blurb: 'Trend followers: price above a rising 50/200 stack, RSI in the strong-but-not-overbought band, volume confirming.',
+    blurb: 'Trend followers: price above a rising 50/200 stack, RSI in the strong-but-not-overbought band, volume confirming. · Estimated time ~7s.',
     tier1: 'momentum',
     jauhi: true,
     fundamentals: false,
@@ -156,7 +170,7 @@ export const CATEGORIES = [
     id: 'penny',
     label: 'Penny Stocks',
     blurb:
-      'Speculative small-cap movers — fast, thin names ranked on raw momentum. High risk; was the old (mislabeled) "Liquid names" default.',
+      'Speculative small-cap movers — fast, thin names ranked on raw momentum. High risk; was the old (mislabeled) "Liquid names" default. · Estimated time ~22s.',
     tier1: 'momentum',
     jauhi: true,
     fundamentals: false,
@@ -173,7 +187,7 @@ export const CATEGORIES = [
     id: 'conglomerate',
     label: 'Conglomerate / Holding',
     blurb:
-      'Diversified giants — the listed arms of Indonesia’s major holding groups (Astra, Salim, Barito, Sinar Mas…). Built-in cross-sector diversification, often trading at a conglomerate discount.',
+      "Diversified giants — the listed arms of Indonesia’s major holding groups (Astra, Salim, Barito, Sinar Mas…). Built-in cross-sector diversification, often trading at a conglomerate discount. · Estimated time ~12s.",
     tier1: 'size',
     jauhi: false, // members include banks (BBCA) + ≥Rp100T blue chips (ASII) — JAUHI would empty the list
     fundamentals: true,

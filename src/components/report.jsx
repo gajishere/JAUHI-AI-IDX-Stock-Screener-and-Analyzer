@@ -88,7 +88,7 @@ export function PrimaryButton({ children, disabled, loading, type = 'button', on
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-on-brand transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-brand-deep hover:-translate-y-px active:translate-y-0 active:scale-[0.98] active:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand bg-gradient-to-b from-brand to-brand-deep px-5 py-2.5 text-sm font-medium text-on-brand shadow-[0_4px_14px_-5px_color-mix(in_srgb,var(--c-brand)_60%,transparent)] transition-[background-image,box-shadow,transform,opacity] duration-150 ease-out hover:-translate-y-px hover:from-brand-deep hover:to-brand-deep hover:shadow-[0_9px_24px_-7px_color-mix(in_srgb,var(--c-brand)_72%,transparent)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"
     >
       {loading && (
         <span
@@ -106,7 +106,7 @@ export function QuietButton({ children, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-11 items-center rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-[background-color,border-color,color,transform] duration-150 ease-out hover:-translate-y-px hover:border-ink-muted hover:text-ink active:translate-y-0 active:scale-[0.98] active:bg-well"
+      className="surface-raised inline-flex min-h-11 items-center rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-[border-color,color,transform,box-shadow] duration-150 ease-out hover:-translate-y-px hover:border-ink-muted hover:text-ink active:translate-y-0 active:scale-[0.98]"
     >
       {children}
     </button>
