@@ -13,6 +13,7 @@ import {
 } from '../components/report';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
+import { LiquidGlass } from '../components/LiquidGlass';
 import { Stepper } from '../components/Stepper';
 import { fetchChart, fetchFundamentals } from '../lib/marketData';
 import { buildAnalysisReport, formatPct, formatRp, formatRpCompact } from '../lib/analysis';
@@ -23,6 +24,8 @@ import { BrokerActionGauge, BrokerActionTable } from '../components/BrokerAction
 import { claudeAIService } from '../lib/claudeAI';
 import { newsService } from '../lib/news';
 import { useLang, useT } from '../lib/i18n';
+import { useSpringPresence } from '../lib/useSpringPresence';
+import { presets } from '../lib/motion';
 
 // Signed percentage moves color by direction, not by assumption
 function moveTone(ratio) {
@@ -128,7 +131,7 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
   const guidance = (ai?.priceGuidance || '').trim();
 
   return (
-    <div className={`rounded-2xl border p-6 sm:p-7 ${style.card}`}>
+    <div className={`verdict-reveal rounded-2xl border p-6 sm:p-7 ${style.card}`}>
       {/* Kicker sits on the strongest part of the verdict gradient, where the
           muted token drops below AA — use a 70% ink so it clears 4.5:1 on the
           full tint in both themes without going full-weight. */}
@@ -306,6 +309,16 @@ export default function StockAnalysisPage() {
   const [newsWindow, setNewsWindow] = useState(6);
 
   const selectedEmiten = findEmiten(ticker);
+
+  // Interruptible presence for the ticker-search suggestion list. `open` is
+  // derived from list length, so the popover animates only on empty↔non-empty
+  // (open/close) — not on every keystroke while typing, which would replay the
+  // enter on each filter. Matches the settings popover + date popup treatment.
+  const { mounted: suggestionsMounted, nodeRef: suggestionsRef } = useSpringPresence(
+    suggestedTickers.length > 0,
+    presets.popoverEnter,
+    presets.popoverExit,
+  );
 
   const handleTickerChange = (e) => {
     const value = e.target.value.toUpperCase();
@@ -567,22 +580,34 @@ export default function StockAnalysisPage() {
                   autoFocus
                   role="combobox"
                   aria-expanded={suggestedTickers.length > 0}
+                  aria-controls="ticker-suggestions"
+                  aria-activedescendant={
+                    activeSuggestion >= 0 ? `ticker-option-${activeSuggestion}` : undefined
+                  }
                   aria-autocomplete="list"
                   className="w-full rounded-2xl border border-line bg-paper py-4 pl-14 pr-5 font-mono text-lg text-ink shadow-lg shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
                 />
-                {suggestedTickers.length > 0 && (
+                {suggestionsMounted && suggestedTickers.length > 0 && (
                   <ul
+                    ref={suggestionsRef}
+                    id="ticker-suggestions"
                     role="listbox"
-                    className="surface-float dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5 text-left"
+                    style={{ transformOrigin: 'top center' }}
+                    className="surface-glass glass-morph absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line py-1.5 text-left"
                   >
                     {suggestedTickers.map((s, index) => (
-                      <li key={s.code} role="option" aria-selected={index === activeSuggestion}>
+                      <li
+                        key={s.code}
+                        id={`ticker-option-${index}`}
+                        role="option"
+                        aria-selected={index === activeSuggestion}
+                      >
                         <button
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => selectStock(s.code)}
                           onMouseEnter={() => setActiveSuggestion(index)}
-                          className={`flex w-full items-baseline gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:scale-[1.02] active:scale-[0.95] ${
+                          className={`tactile-soft flex w-full items-baseline gap-3 px-4 py-2.5 text-left ${
                             index === activeSuggestion ? 'bg-well' : ''
                           }`}
                         >
@@ -613,7 +638,7 @@ export default function StockAnalysisPage() {
               <button
                 type="button"
                 onClick={() => setStage('search')}
-                className="mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:scale-[1.02] active:scale-[0.95]"
+                className="tactile-soft mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:-translate-y-px"
               >
                 <span className="text-ink-muted">‹ {t('Change', 'Ubah')}</span>
                 <span className="font-mono font-semibold">{ticker}</span>
@@ -629,8 +654,10 @@ export default function StockAnalysisPage() {
                 )}
               </p>
 
-              <div className="surface-raised mt-8 rounded-2xl border border-line bg-paper p-6">
-                <DatePicker inline value={date} max={TODAY} onChange={handlePickDate} />
+              <div className="glass-well mt-8">
+                <div className="glass-surface rounded-2xl p-6">
+                  <DatePicker inline value={date} max={TODAY} onChange={handlePickDate} />
+                </div>
               </div>
 
               <p className="mt-5 text-xs text-ink-muted">
@@ -653,7 +680,7 @@ export default function StockAnalysisPage() {
                   setStage('date');
                   setIntentOpen(true);
                 }}
-                className="mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:scale-[1.02] active:scale-[0.95]"
+                className="tactile-soft mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:-translate-y-px"
               >
                 <span className="text-ink-muted">‹ {t('Change goal', 'Ubah tujuan')}</span>
                 <span className="font-mono font-semibold">{ticker}</span>
@@ -790,10 +817,12 @@ export default function StockAnalysisPage() {
         )}
       >
         <div className="grid gap-3">
-          <button
+          <LiquidGlass
+            as="button"
+            variant="card"
             type="button"
             onClick={() => chooseIntent('hold')}
-            className="group flex items-start gap-4 rounded-xl border border-line bg-paper p-4 text-left shadow-[var(--shadow-raised)] transition-[transform,border-color,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-brand hover:bg-brand-tint/30 hover:shadow-[var(--shadow-float)] active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
+            className="group flex items-start gap-4 rounded-xl p-4 text-left hover:-translate-y-px active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
           >
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-strong transition-colors group-hover:bg-brand group-hover:text-on-brand">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -806,12 +835,14 @@ export default function StockAnalysisPage() {
                 {t('Should I hold or sell — and at what price?', 'Sebaiknya tahan atau jual — dan di harga berapa?')}
               </span>
             </span>
-          </button>
+          </LiquidGlass>
 
-          <button
+          <LiquidGlass
+            as="button"
+            variant="card"
             type="button"
             onClick={() => chooseIntent('buy')}
-            className="group flex items-start gap-4 rounded-xl border border-line bg-paper p-4 text-left shadow-[var(--shadow-raised)] transition-[transform,border-color,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-brand hover:bg-brand-tint/30 hover:shadow-[var(--shadow-float)] active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
+            className="group flex items-start gap-4 rounded-xl p-4 text-left hover:-translate-y-px active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20"
           >
             <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-strong transition-colors group-hover:bg-brand group-hover:text-on-brand">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -824,7 +855,7 @@ export default function StockAnalysisPage() {
                 {t('Is this stock worth buying or not?', 'Apakah saham ini layak dibeli atau tidak?')}
               </span>
             </span>
-          </button>
+          </LiquidGlass>
         </div>
       </Modal>
 

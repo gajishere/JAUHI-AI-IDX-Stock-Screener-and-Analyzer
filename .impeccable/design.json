@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-06-17T00:00:00.000Z",
+  "generatedAt": "2026-06-20T00:00:00.000Z",
   "title": "Design System: IDX Stock Analysis & Screening",
   "extensions": {
     "colorMeta": {
@@ -12,7 +12,19 @@
       "neg": { "role": "verdict", "displayName": "Down Red", "canonical": "oklch(0.52 0.17 25)", "tonalRamp": ["#430000","#680000","#8d000e","#b32e2f","#da534f","#ff7670","#ff9a91","#ffbeb4"] },
       "warn": { "role": "verdict", "displayName": "Hold Amber", "canonical": "oklch(0.48 0.11 75)", "tonalRamp": ["#2b0100","#491e00","#693c00","#8a5b00","#ad7c2f","#d09d53","#f5c076","#ffe499"] },
       "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(0.24 0.01 250)", "tonalRamp": ["#0f1215","#282c2f","#44484c","#63666b","#83878b","#a4a8ad","#c7cbd0","#ebeff4"] },
-      "paper": { "role": "neutral", "displayName": "Paper (day) / Trading Floor (night)", "canonical": "#ffffff", "tonalRamp": ["#0f1215","#282c2f","#44484c","#63666b","#83878b","#a4a8ad","#c7cbd0","#ebeff4"] }
+      "paper": { "role": "neutral", "displayName": "Paper (day) / Trading Floor (night)", "canonical": "#ffffff", "tonalRamp": ["#0f1215","#282c2f","#44484c","#63666b","#83878b","#a4a8ad","#c7cbd0","#ebeff4"] },
+      "glass-tint-dark": { "role": "neutral", "displayName": "Liquid Glass Tint (night)", "canonical": "#0a0d12", "tonalRamp": ["#0a0d12","#141821","#222732","#333a47","#49515f","#646d7c","#8b94a3","#c2cad6"] }
+    },
+    "glass": {
+      "note": "Liquid Glass — frosted, lightly refractive material for floating chrome ONLY (modals, popovers, both calendars, primary/secondary action buttons). Never on report/content surfaces. Theme-aware tokens live in :root / .dark.",
+      "tokens": {
+        "--glass-fill": { "day": "255 255 255", "night": "10 13 18", "purpose": "Tint base for the translucent fill (= glass-tint-dark at night)." },
+        "--glass-fill-a": { "day": "0.55", "night": "0.58", "purpose": "Fill opacity — translucent in both themes so the panel reads as see-through over the dimmed page. The dark modal backdrop scrim carries readability; dark ink over the white day fill clears AA with room to spare even on a dimmed page." },
+        "--glass-rim": { "day": "255 255 255", "night": "255 255 255", "purpose": "Lit hairline edge base." },
+        "--glass-rim-a": { "day": "0.6", "night": "0.22", "purpose": "Rim opacity — the specular top edge." },
+        "--glass-blur": { "value": "16px", "purpose": "Backdrop blur radius, paired with saturate(185%)." },
+        "#glass-distortion": { "value": "feTurbulence + feDisplacementMap, scale 28, no specular-lighting pass", "purpose": "One shared SVG filter mounted once at app root — real refraction, tuned low for legibility and zero scroll jank." }
+      }
     },
     "typographyMeta": {
       "display": { "displayName": "Display (Newsreader serif)", "purpose": "Masthead, big report/stage headings, large rating figures. Fixed rem scale, never fluid." },
@@ -38,20 +50,44 @@
   },
   "components": [
     {
-      "name": "Primary Button",
+      "name": "Primary Button (Liquid Glass)",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The one green action. Dark on-brand text, never white. Lifts on hover, settles on press.",
+      "description": "The one green action, in the .glass-accent material — a fully-rounded pill. Brand fill at ≥84% (hover 92%) with backdrop blur, a lit top rim, a deep brand under-glow, and a soft AMBIENT HALO (two wide low-opacity brand glows) that bleeds past the pill edge — the signature of the new liquid-glass read. Dark on-brand text, never white. Stays the most decisive green on screen. Disabled/in-flight drops the halo (no green radiation when non-actionable).",
       "html": "<button class=\"ds-btn-primary\">Run Screening</button>",
-      "css": ".ds-btn-primary { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:10px 20px; border:none; border-radius:8px; background:var(--c-brand); color:var(--c-on-brand); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:background-color 150ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-primary:hover { background:var(--c-brand-deep); transform:translateY(-1px); } .ds-btn-primary:active { transform:translateY(0) scale(0.98); } .ds-btn-primary:focus-visible { outline:2px solid var(--c-brand); outline-offset:2px; } .ds-btn-primary:disabled { opacity:0.45; cursor:not-allowed; }"
+      "css": ".ds-btn-primary { position:relative; display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:10px 24px; border:1px solid color-mix(in srgb, #fff 45%, transparent); border-radius:9999px; background:color-mix(in srgb, var(--c-brand) 84%, transparent); -webkit-backdrop-filter:blur(10px) saturate(190%); backdrop-filter:blur(10px) saturate(190%); box-shadow:0 10px 30px -8px color-mix(in srgb, var(--c-brand) 55%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--c-brand) 40%, transparent), inset 1.5px 1.5px 1px rgb(255 255 255 / 0.6), inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 60%, transparent); color:var(--c-on-brand); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:background-color 200ms cubic-bezier(0.22,1,0.36,1), box-shadow 200ms cubic-bezier(0.22,1,0.36,1), transform 200ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-primary:hover { background:color-mix(in srgb, var(--c-brand) 92%, transparent); box-shadow:0 16px 44px -8px color-mix(in srgb, var(--c-brand) 72%, transparent), 0 6px 18px -6px color-mix(in srgb, var(--c-brand) 50%, transparent), inset 1.5px 1.5px 1px rgb(255 255 255 / 0.72), inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 70%, transparent); transform:translateY(-1px); } .ds-btn-primary:active { transform:translateY(0) scale(0.98); } .ds-btn-primary:focus-visible { outline:2px solid var(--c-ink); outline-offset:3px; border-radius:9999px; } .ds-btn-primary:disabled, .ds-btn-primary[aria-busy=\"true\"] { background:color-mix(in srgb, var(--c-brand) 60%, transparent); box-shadow:inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 -2px 6px -2px color-mix(in srgb, var(--c-brand-deep) 40%, transparent); opacity:0.45; cursor:not-allowed; } .dark .ds-btn-primary { box-shadow:0 12px 34px -8px color-mix(in srgb, var(--c-brand) 62%, transparent), 0 4px 16px -6px color-mix(in srgb, var(--c-brand) 48%, transparent), inset 1.5px 1.5px 1px rgb(255 255 255 / 0.5), inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 60%, transparent); } .dark .ds-btn-primary:focus-visible { outline-color:#eef1f4; }"
     },
     {
-      "name": "Quiet Button",
+      "name": "Quiet Button (Liquid Glass)",
       "kind": "button",
       "refersTo": "button-quiet",
-      "description": "The secondary affordance — bordered, muted ink, transparent fill. Firms up on hover.",
+      "description": "The secondary affordance, in the .glass-quiet material — a fully-rounded pill matching the primary's shape + ambient-halo vocabulary. Translucent elevated fill (58%, hover 76%) + blur + white rim, with a NEUTRAL halo (ink-tinted light / soft black night, never green) bleeding past the edge so the pair reads as one material but the quiet stays a secondary, not a second CTA. Muted ink that firms to ink on hover.",
       "html": "<button class=\"ds-btn-quiet\">Attach broker screenshots</button>",
-      "css": ".ds-btn-quiet { display:inline-flex; align-items:center; min-height:44px; padding:10px 20px; border:1px solid var(--c-line); border-radius:8px; background:transparent; color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:border-color 150ms ease, color 150ms ease, transform 150ms ease; } .ds-btn-quiet:hover { border-color:var(--c-ink-muted); color:var(--c-ink); transform:translateY(-1px); } .ds-btn-quiet:active { transform:translateY(0) scale(0.98); } .ds-btn-quiet:focus-visible { outline:2px solid var(--c-brand); outline-offset:2px; }"
+      "css": ".ds-btn-quiet { display:inline-flex; align-items:center; min-height:44px; padding:10px 24px; border:1px solid rgb(var(--glass-rim) / var(--glass-rim-a)); border-radius:9999px; background:color-mix(in srgb, var(--c-elevated) 58%, transparent); -webkit-backdrop-filter:blur(12px) saturate(170%); backdrop-filter:blur(12px) saturate(170%); box-shadow:0 8px 22px -8px rgb(22 24 28 / 0.28), 0 3px 10px -6px rgb(22 24 28 / 0.18), var(--shadow-raised), inset 0 1px 0 rgb(255 255 255 / 0.32), inset 1px 1px 1px rgb(255 255 255 / 0.2); color:var(--c-ink-muted); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; cursor:pointer; transition:background-color 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 200ms ease; } .ds-btn-quiet:hover { background:color-mix(in srgb, var(--c-elevated) 76%, transparent); border-color:color-mix(in srgb, var(--c-ink-muted) 38%, transparent); box-shadow:0 12px 30px -8px rgb(22 24 28 / 0.36), 0 4px 12px -6px rgb(22 24 28 / 0.22), var(--shadow-float), inset 0 1px 0 rgb(255 255 255 / 0.38), inset 1px 1px 1px rgb(255 255 255 / 0.24); color:var(--c-ink); transform:translateY(-1px); } .ds-btn-quiet:active { transform:translateY(0) scale(0.98); } .ds-btn-quiet:focus-visible { outline:2px solid var(--c-ink); outline-offset:3px; border-radius:9999px; } .dark .ds-btn-quiet { box-shadow:0 10px 28px -8px rgb(0 0 0 / 0.62), 0 3px 12px -6px rgb(0 0 0 / 0.5), var(--shadow-raised), inset 0 1px 0 rgb(255 255 255 / 0.1), inset 1px 1px 1px rgb(255 255 255 / 0.07); } .dark .ds-btn-quiet:focus-visible { outline-color:#eef1f4; }"
+    },
+    {
+      "name": "Liquid Glass Surface",
+      "kind": "custom",
+      "refersTo": "glass-surface",
+      "description": "Signature floating-chrome material — every modal, the settings popover, search/filter popovers, both calendars. Frosted, lightly refractive sheet over a bg-black/55 backdrop scrim; content rides above at z-index 2 so text stays crisp. Ships an opaque fallback for no-backdrop-filter and prefers-reduced-transparency.",
+      "html": "<div class=\"ds-glass\"><h2 class=\"ds-glass-title\">Pick a date</h2><p class=\"ds-glass-body\">The screen reads the tape as of your chosen close.</p></div>",
+      "css": ".ds-glass { position:relative; max-width:24rem; padding:28px; border:1px solid rgb(var(--glass-rim) / var(--glass-rim-a)); border-radius:16px; background:rgb(var(--glass-fill) / var(--glass-fill-a)); -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(185%); backdrop-filter:blur(var(--glass-blur)) saturate(185%); box-shadow:inset 0 1px 0 rgb(var(--glass-rim) / var(--glass-rim-a)), 0 6px 14px -5px rgb(0 0 0 / 0.10), 0 22px 44px -12px rgb(0 0 0 / 0.18); } .ds-glass-title { margin:0; font-family:Newsreader,Georgia,serif; font-size:1.5rem; font-weight:500; letter-spacing:-0.02em; color:var(--c-ink); } .ds-glass-body { margin:6px 0 0; font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; color:var(--c-ink-muted); } @supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))) { .ds-glass { background:var(--c-elevated); } }"
+    },
+    {
+      "name": "Liquid Glass Option Card",
+      "kind": "card",
+      "refersTo": "glass-card",
+      "description": "Interactive choice tile (the decision modal's two options). Translucent resting fill (40%, hover 56%) so the modal's refracted content shows through; lifts and gains a green rim on hover.",
+      "html": "<button class=\"ds-glass-card\"><span class=\"ds-glass-card-title\">I'm holding</span><span class=\"ds-glass-card-sub\">Tell me whether to keep or cut.</span></button>",
+      "css": ".ds-glass-card { display:flex; flex-direction:column; gap:4px; width:100%; padding:16px; text-align:left; border:1px solid rgb(var(--glass-rim) / var(--glass-rim-a)); border-radius:12px; background:color-mix(in srgb, rgb(var(--glass-fill)) 40%, transparent); -webkit-backdrop-filter:blur(12px) saturate(170%); backdrop-filter:blur(12px) saturate(170%); cursor:pointer; transition:background-color 150ms ease, border-color 150ms ease, transform 150ms ease; } .ds-glass-card:hover { background:color-mix(in srgb, rgb(var(--glass-fill)) 56%, transparent); border-color:color-mix(in srgb, var(--c-brand) 55%, transparent); transform:translateY(-2px); } .ds-glass-card:focus-visible { outline:2px solid var(--c-brand); outline-offset:2px; } .ds-glass-card-title { font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; font-weight:500; color:var(--c-ink); } .ds-glass-card-sub { font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.75rem; color:var(--c-ink-muted); }"
+    },
+    {
+      "name": "Liquid Glass Inline Tray",
+      "kind": "custom",
+      "refersTo": "glass-well",
+      "description": "Brand-tinted recessed tray (.glass-well) backing an inline .glass-surface that has no dark scrim behind it (the analysis-step calendar). Glass refracts what's behind it, so over the blank page the frost has nothing to bend; the tinted tray + tint ring give the surface something to float over so it reads as glass, not a flat white card. Theme-aware.",
+      "html": "<div class=\"ds-glass-well\"><div class=\"ds-glass-tray-surface\">Calendar / inline glass content</div></div>",
+      "css": ".ds-glass-well { padding:14px; border:1px solid var(--c-line); border-radius:20px; background-image:radial-gradient(125% 90% at 50% 0%, color-mix(in srgb, var(--c-brand) 13%, transparent) 0%, transparent 62%), linear-gradient(158deg, var(--c-brand-tint) 0%, var(--c-well) 100%); box-shadow:inset 0 1px 3px rgb(0 0 0 / 0.07); } .ds-glass-tray-surface { padding:24px; border:1px solid rgb(var(--glass-rim) / var(--glass-rim-a)); border-radius:16px; background:rgb(var(--glass-fill) / var(--glass-fill-a)); -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(185%); backdrop-filter:blur(var(--glass-blur)) saturate(185%); box-shadow:inset 0 1px 0 rgb(var(--glass-rim) / var(--glass-rim-a)), 0 6px 14px -5px rgb(0 0 0 / 0.10), 0 22px 44px -12px rgb(0 0 0 / 0.18); font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:0.875rem; color:var(--c-ink); }"
     },
     {
       "name": "Verdict Pill",
@@ -102,31 +138,40 @@
       "One decisive green; all other color is semantic verdict only.",
       "Numbers are the content: tabular figures, aligned columns, dotted-leader rows.",
       "Dual theme (light reading room / dark trading floor) from one token set.",
-      "Screenshot-ready — any section cropped and shared stands alone legibly."
+      "Screenshot-ready — any section cropped and shared stands alone legibly.",
+      "Liquid Glass on floating chrome only (modals, popovers, calendars, action buttons); content stays opaque."
     ],
     "rules": [
       { "name": "The On-Brand Rule", "body": "A green fill never carries white text. White-on-#13b87a fails contrast (2.6:1); white-on-#1ece85 fails worse (2.0:1). Green fills carry on-brand (#08130d) dark text. When green must be text, use brand-strong, never brand.", "section": "colors" },
       { "name": "The Verdict Rule", "body": "Green, red, and amber appear only where they carry direction, rating, or risk. A gain or loss always also carries a +/− sign or word — color is never the sole signal.", "section": "colors" },
-      { "name": "The Untinted Paper Rule", "body": "The light ground is pure #ffffff, chroma 0. Warmth is forbidden in the paper; identity lives in the green, the type, and the data.", "section": "colors" },
+      { "name": "The Atmospheric Ground Rule", "body": "Paper surfaces stay near-neutral (white at the top of a raised panel's gradient), but the page canvas carries a faint brand-hued atmospheric lift (--canvas, ~5% green at top, fading out) so the ground reads as lit rather than dead-flat. The tint is the brand's own green, never warm/cream — warmth is still forbidden.", "section": "colors" },
       { "name": "The Sentence-Case Rule", "body": "Headings are sentence case — never ALL CAPS. Short mono section labels are the one rationed exception.", "section": "typography" },
       { "name": "The Tabular Rule", "body": "Any number in a column is mono with tabular-nums; scores and grades align to fixed-width columns so the eye scans straight down.", "section": "typography" },
-      { "name": "The No-Card-Stack Rule", "body": "Surfaces separate with hairlines and dotted leaders, not cards. Nested cards are forbidden everywhere.", "section": "elevation" },
-      { "name": "The Surface-Over-Shadow Rule", "body": "In dark mode, elevation is a lighter surface (#1b2026) plus a brighter border — never a darker shadow.", "section": "elevation" }
+      { "name": "The Glass-On-Chrome-Only Rule", "body": "Liquid Glass is for layers that float above the page — modals, popovers, calendars, action buttons. It is forbidden on the reading layer: reports, dotted-leader rows, the verdict card, data tables. If content is behind glass, it's wrong.", "section": "elevation" },
+      { "name": "The Decisive-Glass Rule", "body": "A glass primary action (.glass-accent) carries the brand fill at ≥80% opacity. Translucency is the texture, not an excuse to wash the green out — the primary CTA must always be the most decisive green on screen, never paler than a selected date or active toggle.", "section": "elevation" },
+      { "name": "The Glass-Fallback Rule", "body": "Every glass surface ships an opaque fallback for no-backdrop-filter and reduced-transparency. Never let the only path to a surface's fill be a blur the browser might not paint.", "section": "elevation" },
+      { "name": "The No-Card-Stack Rule", "body": "Surfaces gain depth, but a report still reads like a document: report facts are dotted-leader rows, not tiled stat cards, and cards are never nested inside cards.", "section": "elevation" },
+      { "name": "The Surface-Over-Shadow Rule", "body": "In dark mode, elevation is carried by the lighter surface gradient plus the top edge highlight and a brighter hairline — never a darker shadow. A deep ambient shadow sits under floating layers only.", "section": "elevation" }
     ],
     "dos": [
       "Do carry on-brand (#08130d) text on every green fill; reach for brand-strong when green must be text. Never white on green.",
       "Do keep color a verdict — green/red/amber only where direction, rating, or risk is meant, always paired with a +/− sign or word.",
       "Do set every figure in IBM Plex Mono with tabular-nums and align scores/grades to fixed-width columns.",
-      "Do separate sections with hairlines and dotted leaders; keep the single centered max-w-4xl column.",
-      "Do lift night-mode overlays onto the elevated surface (#1b2026) with a brighter hairline, not a darker shadow.",
-      "Do keep the light ground pure #ffffff and let the green, type, and data carry identity."
+      "Do separate report sections with hairlines and dotted leaders; keep the single centered max-w-4xl column.",
+      "Do give real containers depth via .surface-raised / .surface-float (gradient sheen + soft tinted shadow + edge highlight), not flat fills.",
+      "Do carry night-mode elevation with the lighter surface gradient + top edge highlight + brighter hairline; reserve deep ambient shadow for floating layers.",
+      "Do keep paper surfaces near-neutral and let the --canvas carry only a faint brand-green atmospheric lift — identity stays in the green, type, and data.",
+      "Do reserve the liquid-glass material (.glass-*, §4) for floating chrome only — modals, popovers, both calendars, and the primary/secondary action buttons — with content lifted above the glass and an opaque fallback for unsupported browsers."
     ],
     "donts": [
       "Don't reproduce Bloomberg-terminal clutter — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.",
       "Don't drift into crypto-hype aesthetics — no neon glows, no gamified urgency, no gradient text.",
       "Don't ship a generic indigo SaaS dashboard — the one accent is Stockbit green, never default Tailwind blue/indigo.",
-      "Don't stack or nest cards; don't tile the report into identical boxes.",
-      "Don't tint the paper warm or use a fluid clamp() display scale.",
+      "Don't nest cards inside cards or tile the report into identical stat boxes — depth is for genuine containers, not for boxing every fact.",
+      "Don't tint the ground warm/cream or use a fluid clamp() display scale (the only canvas tint allowed is the brand green).",
+      "Don't put glass on the reading layer — no glassmorphism on reports, dotted-leader rows, the verdict card, or data tables. The liquid-glass material is only for floating chrome; content stays opaque and screenshot-legible.",
+      "Don't wash the green out — a glass primary (.glass-accent) holds brand fill at ≥80%; translucency is the texture, never an excuse to dim the CTA below a selected date or active toggle.",
+      "Don't let depth get loud — no neon glow or heavy drop shadows; keep it the soft, refined layered system, and ship an opaque fallback for every glass surface.",
       "Don't rely on color alone, hover alone, or shadow alone to carry meaning."
     ]
   }

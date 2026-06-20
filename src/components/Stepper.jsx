@@ -11,18 +11,22 @@ export function Stepper({ steps, current }) {
         return (
           <li key={label} className="flex items-center gap-2.5 sm:gap-3">
             <span
-              className={`flex items-center gap-2 text-xs font-medium transition-[color,transform] duration-200 ${
+              className={`flex items-center gap-2 text-xs font-medium transition-[color] duration-200 ${
                 state === 'todo' ? 'text-ink-muted/60' : 'text-ink'
               }`}
             >
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-[background-color,color,transform] duration-200 sm:h-5 sm:w-5 ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-[background-color,color,transform] sm:h-5 sm:w-5 ${
                   state === 'active'
                     ? 'scale-105 bg-brand text-on-brand'
                     : state === 'done'
                       ? 'bg-pos-tint text-pos'
                       : 'bg-well text-ink-muted'
                 }`}
+                style={{
+                  transitionTimingFunction: 'var(--spring-settle)',
+                  transitionDuration: 'var(--spring-settle-dur)',
+                }}
               >
                 {state === 'done' ? (
                   <span key="check" className="checkmark-pop" aria-hidden="true">✓</span>

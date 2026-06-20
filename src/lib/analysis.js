@@ -120,9 +120,26 @@ function bandarmologyScoreComponent(bandar) {
   // the week's total traded value. This is the conviction measure the old
   // broker-COUNT ratio couldn't capture (10 small buyers ≠ 1 whale). A ±10%
   // net ratio is treated as full conviction; in between it scales linearly.
+  //
+  // IMPORTANT: use the API's accurate full-week totals (buyTotal/sellTotal)
+  // when present — these are summed from the per-session det aggregates and
+  // are NEVER truncated by the per-fetch `limit`. The buyRows/sellRows are
+  // capped at `limit` per session, so summing them systematically under-counts
+  // the long tail of smaller brokers on liquid tickers (the W-1 inaccuracy).
+  // Rows are only a fallback for legacy single-day payloads without totals.
   const weekValue = numFinite(bandar.sessionValue) ? bandar.sessionValue : 0;
-  const totalBuy = sumForeign(bandar.buyRows, false) + sumForeign(bandar.buyRows, true);
-  const totalSell = sumForeign(bandar.sellRows, false) + sumForeign(bandar.sellRows, true);
+  const buyTotalFinite = numFinite(bandar.buyTotal);
+  const sellTotalFinite = numFinite(bandar.sellTotal);
+  const hasAccurateTotals = buyTotalFinite != null || sellTotalFinite != null;
+  let totalBuy;
+  let totalSell;
+  if (hasAccurateTotals) {
+    totalBuy = buyTotalFinite ?? 0;
+    totalSell = sellTotalFinite ?? 0;
+  } else {
+    totalBuy = sumForeign(bandar.buyRows, false) + sumForeign(bandar.buyRows, true);
+    totalSell = sumForeign(bandar.sellRows, false) + sumForeign(bandar.sellRows, true);
+  }
   const totalBoth = totalBuy + totalSell;
   if (totalBoth > 0) {
     const netRatio = (totalBuy - totalSell) / totalBoth;
@@ -145,6 +162,9 @@ function bandarmologyScoreComponent(bandar) {
 
   // 4. Foreign flow — foreigners net buying is a well-known IDX tailwind.
   // Uses the fuller buyRows/sellRows tape; absent on legacy single-day shapes.
+  // (Foreign flag is per-broker, so this term still reads from rows — there's
+  // no API total for foreign-only net. Acceptable: foreign flow is a secondary
+  // term and the per-broker rows capture the largest foreign brokers fine.)
   const foreignNet = foreignNetValue(bandar);
   if (totalBoth > 0 && foreignNet !== null) {
     const fRatio = Math.max(-1, Math.min(1, foreignNet / totalBoth));

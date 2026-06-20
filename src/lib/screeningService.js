@@ -9,6 +9,7 @@ import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory, capTierBounds } from './screeningCategories.js';
 import { finishAIActivity, setAIConfigured, startAIActivity } from './aiSession.js';
+import { rejectWithReason } from './claudeAI';
 
 // Bounded concurrency for the Tier-2 deep-enrich (each candidate = 1 chart +
 // 1 fundamentals fetch); keeps the proxy/Yahoo from being hammered.
@@ -202,7 +203,7 @@ Return ONLY the JSON structure specified in the system prompt.
     }
 
     if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
+      await rejectWithReason(response);
     }
 
     const data = await response.json();
@@ -1070,7 +1071,7 @@ Provide your response in the exact JSON format specified in the system prompt.
       });
 
       if (!response.ok) {
-        throw new Error(`Claude API error: ${response.status}`);
+        await rejectWithReason(response);
       }
 
       const data = await response.json();

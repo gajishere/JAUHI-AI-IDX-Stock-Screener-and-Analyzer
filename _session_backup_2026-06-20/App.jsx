@@ -2,8 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import ApiStatusPage from './pages/ApiStatusPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
+import ButtonShowcasePage from './pages/ButtonShowcasePage';
 import { SettingsMenu } from './components/SettingsMenu';
-import { GlassFilter } from './components/LiquidGlass';
 import { useT } from './lib/i18n';
 
 function App() {
@@ -12,12 +12,11 @@ function App() {
   const isAnalysisPage = location.pathname === '/analysis' || location.pathname === '/';
   const isScreeningPage = location.pathname === '/screening';
   const isApiStatusPage = location.pathname === '/api-status';
+  const isButtonShowcasePage = location.pathname === '/button-showcase';
 
   return (
     <div className="flex min-h-screen flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-      {/* Single shared refraction filter for every liquid-glass surface. */}
-      <GlassFilter />
-      <header className="border-b border-line">
+      <header className="glass-bar sticky top-0 z-sticky border-b border-line">
         <div className="mx-auto w-full max-w-4xl px-5 pt-[max(2rem,env(safe-area-inset-top))] sm:px-6 sm:pt-12">
           <div className="space-y-5 sm:space-y-6">
             <div className="flex items-start justify-between gap-4">
@@ -34,7 +33,7 @@ function App() {
             <nav className="-mx-2 mt-2 flex flex-wrap gap-x-3 gap-y-1 sm:mx-0 sm:mt-4 sm:gap-x-6">
               <Link
                 to="/analysis"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
+                className={`-mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium transition-colors duration-150 sm:min-h-0 sm:px-0 sm:pb-3 ${
                   isAnalysisPage
                     ? 'border-brand text-ink'
                     : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
@@ -44,7 +43,7 @@ function App() {
               </Link>
               <Link
                 to="/screening"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
+                className={`-mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium transition-colors duration-150 sm:min-h-0 sm:px-0 sm:pb-3 ${
                   isScreeningPage
                     ? 'border-brand text-ink'
                     : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
@@ -54,7 +53,7 @@ function App() {
               </Link>
               <Link
                 to="/api-status"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
+                className={`-mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium transition-colors duration-150 sm:min-h-0 sm:px-0 sm:pb-3 ${
                   isApiStatusPage
                     ? 'border-brand text-ink'
                     : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
@@ -82,6 +81,9 @@ function App() {
         </div>
         <div className="route-panel" hidden={!isApiStatusPage}>
           <ApiStatusPage />
+        </div>
+        <div className="route-panel" hidden={!isButtonShowcasePage}>
+          <ButtonShowcasePage />
         </div>
       </main>
 

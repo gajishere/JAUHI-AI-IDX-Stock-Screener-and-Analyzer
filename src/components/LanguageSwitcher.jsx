@@ -41,7 +41,7 @@ export function LanguageSwitcher() {
     <div
       role="group"
       aria-label="Language / Bahasa"
-      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line bg-paper p-1 shadow-sm shadow-ink/5"
+      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line/70 bg-well/40 p-1 shadow-sm shadow-ink/5 backdrop-blur-sm"
     >
       {OPTIONS.map(({ code, short, name, Flag }) => {
         const active = lang === code;
@@ -52,7 +52,7 @@ export function LanguageSwitcher() {
             onClick={() => setLang(code)}
             aria-pressed={active}
             title={name}
-            className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-[transform,opacity,background-color] duration-200 hover:scale-[1.02] active:scale-[0.95] sm:min-h-9 ${
+            className={`tactile-soft inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
               active ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
             }`}
           >

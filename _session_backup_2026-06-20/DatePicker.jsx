@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLang, useT } from '../lib/i18n';
-import { useSpringPresence } from '../lib/useSpringPresence';
-import { presets } from '../lib/motion';
+import { useGlassSpecular } from '../lib/useGlassSpecular';
 
 export function DatePicker({ value, onChange, min, max, placeholder, inline = false }) {
   const t = useT();
@@ -15,6 +14,8 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef(null);
   const popupRef = useRef(null);
+  // Drives the pointer-tracked specular highlight on the glass calendar popup.
+  const glassRef = useGlassSpecular();
   // Track which direction the month is sliding for the transition.
   const [slideDir, setSlideDir] = useState(0); // 0 = no animation, 1 = forward, -1 = back
 
@@ -146,14 +147,6 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
     return new Date();
   });
 
-  // Interruptible popup presence (non-inline mode only). The calendar scales+fades
-  // from the input below it; closing plays a reverse so it reads as retracting.
-  const { mounted: popupMounted, nodeRef: popupAnimRef } = useSpringPresence(
-    isOpen,
-    presets.popoverEnter,
-    presets.popoverExit,
-  );
-
   const prevMonth = () => {
     setSlideDir(-1);
     setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -172,7 +165,7 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
       <div className={`flex items-center justify-between ${inline ? 'mb-5' : 'px-4 pt-4 mb-4'}`}>
         <button
           onClick={prevMonth}
-          className="tactile-soft rounded-md border border-line px-2.5 py-1 text-sm font-medium text-ink-muted hover:border-ink-muted hover:text-ink active:bg-well disabled:cursor-not-allowed disabled:opacity-45"
+          className="spring rounded-md border border-line px-2.5 py-1 text-sm font-medium text-ink-muted hover:border-ink-muted hover:text-ink hover:scale-[1.02] active:bg-well active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-45"
           aria-label={t('Previous month', 'Bulan sebelumnya')}
         >
           ‹
@@ -182,7 +175,7 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
         </h2>
         <button
           onClick={nextMonth}
-          className="tactile-soft rounded-md border border-line px-2.5 py-1 text-sm font-medium text-ink-muted hover:border-ink-muted hover:text-ink active:bg-well disabled:cursor-not-allowed disabled:opacity-45"
+          className="spring rounded-md border border-line px-2.5 py-1 text-sm font-medium text-ink-muted hover:border-ink-muted hover:text-ink hover:scale-[1.02] active:bg-well active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-45"
           aria-label={t('Next month', 'Bulan berikutnya')}
         >
           ›
@@ -194,11 +187,11 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
         {/* table-fixed: the 7 columns share the table width equally, so day
             numbers line up under their weekday headers instead of shifting to
             fit the widest 3-letter abbreviation in each column. */}
-        <table className="w-full table-fixed border-collapse text-center text-xs">
+        <table className="w-full table-fixed text-center text-xs">
           <thead>
             <tr>
               {[...Array(7)].map((_, i) => (
-                <th key={i} className="border border-line/45 py-2 font-normal text-ink-muted">
+                <th key={i} className="pb-2 font-normal text-ink-muted">
                   {dayNames[i]}
                 </th>
               ))}
@@ -213,18 +206,18 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
                   {weekDays.map((day, dayIndex) => {
                     const index = weekIndex * 7 + dayIndex;
                     if (day === null) {
-                      return <td key={index} className="border border-line/45"></td>;
+                      return <td key={index}></td>;
                     }
                     return (
-                      <td key={index} className={`relative border border-line/45 ${inline ? 'h-12' : 'h-10'}`}>
+                      <td key={index} className={`relative ${inline ? 'h-12' : 'h-10'}`}>
                         <button
                           onClick={() => handleDateSelect(day.date)}
                           disabled={day.isDisabled}
-                          className={`tactile-soft flex h-full w-full items-center justify-center rounded-md font-medium text-sm ${
+                          className={`spring flex h-full w-full items-center justify-center rounded-md font-medium text-sm transition-[background-color,border-color,color,transform] duration-150 ${
                             day.isSelected
                               ? 'bg-brand text-on-brand hover:bg-brand-deep'
                               : day.isToday
-                                ? 'border border-[color-mix(in_srgb,var(--c-brand)_45%,transparent)] text-brand-strong hover:bg-brand-tint'
+                                ? 'border-2 border-brand text-brand-strong hover:bg-brand-tint'
                                 : 'hover:bg-well-2 hover:text-ink'
                           } ${day.isDisabled ? 'text-ink-muted cursor-not-allowed' : ''}`}
                           aria-label={`${day.isSelected ? t('Selected, ', 'Terpilih, ') : ''}${
@@ -278,14 +271,13 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
         </svg>
       </div>
 
-      {popupMounted && (
+      {isOpen && (
         <div
           ref={(node) => {
             popupRef.current = node;
-            popupAnimRef.current = node;
+            glassRef.current = node;
           }}
-          className="surface-float absolute z-dropdown mt-2 w-full max-w-xs rounded-md border border-line bg-elevated"
-          style={{ transformOrigin: 'top center' }}
+          className="surface-glass glass-morph absolute z-dropdown mt-2 w-full max-w-xs rounded-xl border border-line"
         >
           {calendarBody}
         </div>

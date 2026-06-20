@@ -9,6 +9,28 @@ function compactText(text, max = 900) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+// The Vercel /anthropic proxy (api/anthropic.js) returns a JSON body with a
+// "message" field explaining non-2xx outcomes (e.g. "CLAUDE_API_KEY is not
+// configured on the server", or Anthropic's own error). We surface that reason
+// instead of a bare status code so the API Status page can say what's wrong.
+// Exported so the other AI surfaces (news, screening) report the same detail.
+export async function rejectWithReason(response, label = 'Claude API error') {
+  let reason = '';
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      reason = data?.message || data?.error?.message || '';
+    } else {
+      reason = (await response.text()).trim();
+    }
+  } catch {
+    reason = '';
+  }
+  reason = (reason || '').slice(0, 300);
+  throw new Error(reason ? `${label}: ${response.status} — ${reason}` : `${label}: ${response.status}`);
+}
+
 // Instruction appended to prompts so Claude writes its prose in the language the
 // user has selected in the UI. JSON keys and controlled tokens stay English.
 function languageDirective(language) {
@@ -96,7 +118,7 @@ class ClaudeAIService {
       });
 
       if (!response.ok) {
-        throw new Error(`Claude API error: ${response.status}`);
+        await rejectWithReason(response);
       }
 
       finishAIActivity(activityId, {
@@ -376,7 +398,7 @@ They want a direct answer to ONE question: "Should I hold or sell this — and a
       });
 
       if (!response.ok) {
-        throw new Error(`Claude API error: ${response.status}`);
+        await rejectWithReason(response);
       }
 
       const data = await response.json();
@@ -531,7 +553,7 @@ ${languageDirective(language)} (Ticker codes stay as-is.)`;
       });
 
       if (!response.ok) {
-        throw new Error(`Claude API error: ${response.status}`);
+        await rejectWithReason(response);
       }
       const data = await response.json();
       const content = data.content?.[0]?.text ?? '';

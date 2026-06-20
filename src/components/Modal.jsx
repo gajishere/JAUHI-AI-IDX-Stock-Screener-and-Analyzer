@@ -1,52 +1,66 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../lib/i18n';
+import { presets } from '../lib/motion';
+import { useSpringPresence, useBackdropPresence } from '../lib/useSpringPresence';
 
-// Leave animation duration — matches the CSS .modal-leave-backdrop timing.
-const LEAVE_MS = 180;
-
-// A centered modal over a dimmed backdrop. Escape and backdrop-click close it;
-// focus moves into the dialog on open and the page scroll is locked. The modal
-// plays an entrance animation on open and a leave animation on close; the
-// parent's state flips immediately (onClose fires on the trigger, not on
-// unmount) while the component delays its own unmount to play the exit.
-export function Modal({ open, onClose, title, description, children, labelledById = 'modal-title' }) {
+// A centered modal over a dimmed backdrop. Escape and backdrop-click close it; focus
+// moves into the dialog on open and the page scroll is locked.
+//
+// Enter/exit run through WAAPI via the presence hooks, which makes them INTERRUPTIBLE:
+// reopening mid-exit just cancels the exit and replays the enter, no timer desync, no
+// jank — the way iOS overlays always feel fluid. The dialog uses the real modal spring
+// (opacity + upward translate + a 0.985→1 scale settle, the "iOS sheet" read); the
+// backdrop is a plain fade (a scrim has no position to spring from).
+export function Modal({ open, onClose, title, description, children, labelledById = 'modal-title', variant = 'glass' }) {
   const t = useT();
   const dialogRef = useRef(null);
-  const [closing, setClosing] = useState(false);
-  const closeTimeout = useRef(null);
-  const isClosing = closing && !open;
+
+  // Drive both layers through the interruptible presence hooks. `mounted` stays true
+  // while an exit is playing and flips false only when the exit resolves — so the node
+  // stays on screen for the full leave animation, then unmounts cleanly.
+  const { mounted: dialogMounted, nodeRef: dialogAnimRef } = useSpringPresence(
+    open,
+    presets.modalEnter,
+    presets.modalExit,
+  );
+  const { mounted: backdropMounted, ref: backdropRef } = useBackdropPresence(open);
 
   const handleClose = useCallback(() => {
-    if (!open && closing) return;
     onClose?.();
-    setClosing(true);
-    closeTimeout.current = setTimeout(() => setClosing(false), LEAVE_MS);
-  }, [closing, onClose, open]);
+  }, [onClose]);
 
   useEffect(() => {
-    if (!open && !closing) return;
+    if (!open) return;
     const onKey = (e) => {
       if (e.key === 'Escape') handleClose();
     };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    if (!isClosing) dialogRef.current?.focus();
+    // Focus the dialog for screen readers once it's mounted. Deferred so the
+    // presence node has been committed to the DOM by the time we focus it.
+    const focusTimer = setTimeout(() => dialogRef.current?.focus(), 0);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
+      clearTimeout(focusTimer);
     };
-  }, [open, closing, isClosing, handleClose]);
+  }, [open, handleClose]);
 
-  // Cleanup timeout on unmount.
-  useEffect(() => () => { if (closeTimeout.current) clearTimeout(closeTimeout.current); }, []);
+  // Render the portal while open OR while either layer is still mid-exit. Derived from
+  // the presence hooks' own mount state — no extra effect or state needed.
+  const shouldRender = open || dialogMounted || backdropMounted;
+  if (!shouldRender) return null;
 
-  if (!open && !closing) return null;
+  // Merge the presence ref with our focus ref.
+  const setDialogRef = (node) => {
+    dialogRef.current = node;
+    dialogAnimRef.current = node;
+  };
 
-  // Render into a portal so that `position: fixed` is resolved against the
-  // viewport, not a parent that happens to create a containing block (e.g.
-  // .route-panel's transform animation).
+  // Render into a portal so `position: fixed` resolves against the viewport, not a
+  // parent that creates a containing block (e.g. .route-panel's transform animation).
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -56,39 +70,46 @@ export function Modal({ open, onClose, title, description, children, labelledByI
       }}
     >
       {/* Backdrop */}
-      <div
-        className={`absolute inset-0 bg-ink/40 backdrop-blur-[2px] ${isClosing ? 'modal-leave-backdrop' : 'modal-enter-backdrop'}`}
-        aria-hidden="true"
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={labelledById}
-        tabIndex={-1}
-        className={`surface-float relative w-full max-w-lg rounded-xl border border-line bg-elevated p-7 outline-none ${isClosing ? 'modal-leave' : 'modal-enter'}`}
-      >
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <h2 id={labelledById} className="font-serif text-2xl font-medium tracking-tight">
-              {title}
-            </h2>
-            {description && <p className="mt-1.5 text-sm text-ink-muted">{description}</p>}
+      {backdropMounted && (
+        <div
+          ref={backdropRef}
+          className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+          aria-hidden="true"
+        />
+      )}
+      {dialogMounted && (
+        <div
+          ref={setDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={labelledById}
+          tabIndex={-1}
+          className={`relative w-full max-w-lg rounded-xl p-7 outline-none ${
+            variant === 'glass' ? 'glass-surface' : 'surface-float border border-line bg-elevated'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <h2 id={labelledById} className="font-serif text-2xl font-medium tracking-tight">
+                {title}
+              </h2>
+              {description && <p className="mt-1.5 text-sm text-ink-muted">{description}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              aria-label={t('Close', 'Tutup')}
+              className="tactile-soft -mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-ink-muted hover:bg-well hover:text-ink"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            aria-label={t('Close', 'Tutup')}
-            className="-mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-ink-muted transition-colors hover:bg-well hover:text-ink"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+          <div className="mt-5">{children}</div>
         </div>
-        <div className="mt-5">{children}</div>
-      </div>
+      )}
     </div>,
-    document.body
+    document.body,
   );
 }

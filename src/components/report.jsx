@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { ratingTone } from './reportStyles';
 import { useT } from '../lib/i18n';
+import { useElasticScroll } from '../lib/useElasticScroll';
 
 const BROKER_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -88,7 +89,7 @@ export function PrimaryButton({ children, disabled, loading, type = 'button', on
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand bg-gradient-to-b from-brand to-brand-deep px-5 py-2.5 text-sm font-medium text-on-brand shadow-[0_4px_14px_-5px_color-mix(in_srgb,var(--c-brand)_60%,transparent)] transition-[background-image,box-shadow,transform,opacity] duration-150 ease-out hover:-translate-y-px hover:from-brand-deep hover:to-brand-deep hover:shadow-[0_9px_24px_-7px_color-mix(in_srgb,var(--c-brand)_72%,transparent)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"
+      className="glass-accent tactile-deep inline-flex min-h-11 items-center gap-2 px-6 py-2.5 text-sm font-medium hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
     >
       {loading && (
         <span
@@ -106,7 +107,7 @@ export function QuietButton({ children, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="surface-raised inline-flex min-h-11 items-center rounded-md border border-line px-5 py-2.5 text-sm font-medium text-ink-muted transition-[border-color,color,transform,box-shadow] duration-150 ease-out hover:-translate-y-px hover:border-ink-muted hover:text-ink active:translate-y-0 active:scale-[0.98]"
+      className="glass-quiet tactile-soft inline-flex min-h-11 items-center px-6 py-2.5 text-sm font-medium text-ink-muted hover:-translate-y-px hover:text-ink active:translate-y-0"
     >
       {children}
     </button>
@@ -128,6 +129,9 @@ export function FieldLabel({ children, htmlFor }) {
 export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
   const t = useT();
   const [dragging, setDragging] = useState(false);
+  // iOS-style rubber-band on the attached-files list (touch only). The list is the
+  // one place in the report with real scroll momentum, so it earns the gesture.
+  const listRef = useElasticScroll();
 
   // Materialize the FileList synchronously before the input is cleared.
   const addFiles = (list) => {
@@ -181,7 +185,7 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
       </label>
 
       {files.length > 0 && (
-        <ul className="mt-3 max-h-40 space-y-1.5 overflow-y-auto">
+        <ul ref={listRef} className="ios-scroll mt-3 max-h-40 space-y-1.5 overflow-y-auto">
           {files.map((file, index) => (
             <li
               key={`${file.name}:${file.size}`}
@@ -195,7 +199,7 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
               <button
                 type="button"
                 onClick={() => onRemove(index)}
-                className="-mr-1 shrink-0 rounded px-1.5 py-1 font-medium text-ink-muted transition-[transform,color] duration-200 hover:scale-[1.02] hover:text-neg active:scale-[0.95]"
+                className="tactile-soft -mr-1 shrink-0 rounded px-1.5 py-1 font-medium text-ink-muted hover:text-neg"
                 aria-label={t(`Remove ${file.name}`, `Hapus ${file.name}`)}
               >
                 {t('Remove', 'Hapus')}

@@ -185,6 +185,14 @@ async function fetchBandarmologyUncached(code, date) {
     totalBuyers: det.total_buyer ?? null,
     totalSellers: det.total_seller ?? null,
     sessionValue: num(det.value),
+    // The API's own FULL-session buy/sell totals — these are never truncated
+    // by the `limit` param the way buyRows/sellRows are, so they are the
+    // accurate basis for the W-1 aggregate's net-flow conviction. The rows
+    // below are still capped at `limit` for the table view only. Used by
+    // aggregateBandarmology to avoid the systematic under-count that summing
+    // truncated rows would introduce on liquid tickers.
+    detBuyValue: num(det.buy_value),
+    detSellValue: num(det.sell_value),
     topBuyers: buys.slice(0, 5).map(buyer),
     topSellers: sells.slice(0, 5).map(seller),
     // Fuller broker tape (up to the API's row limit) for the broker-action table.
@@ -270,6 +278,41 @@ export function aggregateBandarmology(results) {
     }
   }
 
+  // Cross-net: a broker who flipped sides across sessions (net buyer one day,
+  // net seller another) must be reconciled before finalizing. Without this step
+  // they appear in BOTH buyRows and sellRows, making the W-1 table show inflated
+  // gross values instead of a true weekly net position.
+  for (const [k, buyEntry] of buyMap) {
+    const sellEntry = sellMap.get(k);
+    if (!sellEntry) continue;
+    const net = buyEntry.value - sellEntry.value;
+    if (net > 0) {
+      // Still a net buyer — keep buy side with net value; preserve their buy avg.
+      const buyAvg = buyEntry.value > 0 ? buyEntry.valueForAvg / buyEntry.value : 0;
+      buyMap.set(k, {
+        ...buyEntry,
+        value: net,
+        lot: Math.max(0, buyEntry.lot - sellEntry.lot),
+        valueForAvg: net * buyAvg,
+      });
+      sellMap.delete(k);
+    } else if (net < 0) {
+      // Net seller — keep sell side with net value; preserve their sell avg.
+      const sellAvg = sellEntry.value > 0 ? sellEntry.valueForAvg / sellEntry.value : 0;
+      sellMap.set(k, {
+        ...sellEntry,
+        value: -net,
+        lot: Math.max(0, sellEntry.lot - buyEntry.lot),
+        valueForAvg: -net * sellAvg,
+      });
+      buyMap.delete(k);
+    } else {
+      // Exactly balanced across the week — remove from both sides.
+      buyMap.delete(k);
+      sellMap.delete(k);
+    }
+  }
+
   const finalize = (m) =>
     [...m.values()]
       .map((r) => ({ ...r, avg: r.value > 0 ? r.valueForAvg / r.value : 0 }))
@@ -282,16 +325,27 @@ export function aggregateBandarmology(results) {
   const topBuyers = buyRows.slice(0, 5).map((r) => ({ code: r.code, foreign: r.foreign, value: r.value }));
   const topSellers = sellRows.slice(0, 5).map((r) => ({ code: r.code, foreign: r.foreign, value: r.value }));
 
-  // Re-derive accdist from the week's summed buyer vs seller values. The API
-  // string codes ("Acc"/"Big Acc"/"Dist") can't be averaged across days, so a
-  // magnitude-based read is the honest aggregate. Same code prefix convention
-  // so accTone()/bandarmologyScoreComponent keep matching on "acc"/"dist".
-  const totalBuyValue = buyRows.reduce((a, b) => a + b.value, 0);
-  const totalSellValue = sellRows.reduce((a, b) => a + b.value, 0);
+  // Re-derive accdist + the net-flow conviction basis from the API's own
+  // FULL-session totals (detBuyValue/detSellValue), NOT from the summed
+  // buyRows/sellRows. The rows are capped at `limit` per session, so summing
+  // them would systematically under-count the long tail of smaller brokers on
+  // liquid tickers — the source of the W-1 inaccuracy. The det totals are the
+  // API's own aggregates and are never truncated. Falls back to row sums only
+  // when a legacy/older payload lacks the det totals.
+  let totalBuyValue = sessions.reduce((a, r) => a + (r.detBuyValue ?? 0), 0);
+  let totalSellValue = sessions.reduce((a, r) => a + (r.detSellValue ?? 0), 0);
+  if (totalBuyValue === 0 && totalSellValue === 0) {
+    totalBuyValue = buyRows.reduce((a, b) => a + b.value, 0);
+    totalSellValue = sellRows.reduce((a, b) => a + b.value, 0);
+  }
   const netFlow = totalBuyValue - totalSellValue;
   const denom = totalBuyValue + totalSellValue;
   const netRatio = denom > 0 ? netFlow / denom : 0;
   const accdist = deriveAccdist(netRatio);
+  // Carry the accurate totals so bandarScore can score off them directly
+  // rather than re-summing the (truncated) rows.
+  const buyTotal = totalBuyValue;
+  const sellTotal = totalSellValue;
   const top5NetValue = topBuyers.reduce((a, b) => a + b.value, 0) - topSellers.reduce((a, b) => a + b.value, 0);
 
   const dates = sessions.map((r) => r.date).filter(Boolean).sort();
@@ -310,6 +364,11 @@ export function aggregateBandarmology(results) {
     totalBuyers: totalBuyers > 0 ? totalBuyers : null,
     totalSellers: totalSellers > 0 ? totalSellers : null,
     sessionValue,
+    // Accurate full-week buy/sell totals summed from the API's per-session det
+    // aggregates (never truncated). bandarScore reads these for net-flow
+    // conviction; buyRows/sellRows are for the table display only.
+    buyTotal,
+    sellTotal,
     topBuyers,
     topSellers,
     buyRows,

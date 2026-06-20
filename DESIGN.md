@@ -17,6 +17,10 @@ colors:
   elevated-dark: "#1b2026"
   line: "#e6e8ea"
   line-dark: "#2f353d"
+  # Liquid Glass — frosted floating-chrome material. Light fill base = paper (#ffffff);
+  # dark fill base below. Fill alpha, rim alpha, and blur are opacity/filter values
+  # (not colors) and live in §4 Elevation + the sidecar, not the token schema.
+  glass-tint-dark: "#0a0d12"
   # Text
   ink: "#16181c"
   ink-dark: "#eef1f4"
@@ -78,14 +82,14 @@ components:
   button-primary:
     backgroundColor: "{colors.brand}"
     textColor: "{colors.on-brand}"
-    rounded: "{rounded.md}"
-    padding: "10px 20px"
+    rounded: "{rounded.full}"
+    padding: "10px 24px"
   button-primary-hover:
     backgroundColor: "{colors.brand-deep}"
   button-quiet:
     textColor: "{colors.ink-muted}"
-    rounded: "{rounded.md}"
-    padding: "10px 20px"
+    rounded: "{rounded.full}"
+    padding: "10px 24px"
   pill:
     backgroundColor: "{colors.well}"
     textColor: "{colors.ink-muted}"
@@ -113,6 +117,8 @@ This is a quiet research desk that happens to read the live order flow. It carri
 
 The surface comes in two ambient settings. **Day** is a pure-white reading room; **Night** is a near-black trading floor (`#0d0f12`). The same tokens carry both — the user flips them from the gear in the top-right, the choice follows the OS by default and persists. Color is always a verdict, never decoration: a number is green because it went up, red because it went down, amber because it's a hold — never because green is pretty.
 
+One deliberate exception to the desk's restraint: the **floating chrome** — every modal, popover, the settings menu, both date calendars, and the primary/secondary action buttons — is rendered in an Apple-style **Liquid Glass** material (frosted, lightly refractive, theme-aware). This is a *scoped* choice, never a default coat: the reading layer (reports, dotted-leader rows, data) stays opaque and screenshot-legible. Glass lives only where the eye expects a surface to float above the page. See §4.
+
 What this system explicitly rejects: **Bloomberg-terminal clutter** (wall-to-wall density, ALL-CAPS shouting, ten colors fighting), **crypto-hype aesthetics** (neon glows, gamified urgency), and **generic indigo SaaS dashboard** templates. If a screen starts to feel like any of those, it has drifted.
 
 **Key Characteristics:**
@@ -121,6 +127,7 @@ What this system explicitly rejects: **Bloomberg-terminal clutter** (wall-to-wal
 - Numbers are the content: tabular figures, aligned columns, dotted-leader rows.
 - Dual theme (light reading room / dark trading floor) from one token set.
 - Screenshot-ready — any section cropped and shared stands alone legibly.
+- Liquid Glass on floating chrome only (modals, popovers, calendars, action buttons); content stays opaque.
 
 ## 2. Colors
 
@@ -176,7 +183,7 @@ A near-monochrome ink-and-paper base with exactly one identity color (green) and
 
 ## 4. Elevation — Refined Depth
 
-The surface is **layered, not flat**. Every real container carries a soft top-down gradient sheen, a low-opacity tinted shadow, and a 1px top edge highlight, so panels read as lit, dimensional surfaces lifting off an atmospheric ground — while the literate research feel (serif headings, dotted-leader rows, generous air) is preserved. Depth is *refined*: present and premium, never loud. Glassmorphism, neon glows, and heavy drop shadows remain out.
+The surface is **layered, not flat**. Every real container carries a soft top-down gradient sheen, a low-opacity tinted shadow, and a 1px top edge highlight, so panels read as lit, dimensional surfaces lifting off an atmospheric ground — while the literate research feel (serif headings, dotted-leader rows, generous air) is preserved. Depth is *refined*: present and premium, never loud. Neon glows and heavy drop shadows remain out. Glassmorphism is **no longer banned outright** — it is a deliberate, scoped material reserved for floating chrome (see Liquid Glass below); it never touches the content layer.
 
 The whole system is driven by tokens + two reusable classes in `index.css`, so depth is consistent app-wide and theme-aware:
 
@@ -191,17 +198,71 @@ The whole system is driven by tokens + two reusable classes in `index.css`, so d
 - **`--edge-highlight`**: `inset 0 1px 0 rgb(255 255 255 / .7)` (light) — the lit top edge.
 - Primary green buttons carry a vertical `brand → brand-deep` gradient plus a brand-hued glow shadow that intensifies on hover.
 
+### Liquid Glass — floating chrome only
+
+An Apple-style frosted, lightly refractive material for the layers that float above the page. Driven by tokens + a small class set in `index.css`, theme-aware, and **never applied to report/content surfaces**. Frosted surfaces stack two pseudo-layers so depth never costs legibility: a `::before` blurred backdrop bent by an SVG displacement filter (real refraction, not just blur), a `::after` translucent tint fill with an inset specular highlight, and the real content lifted above both (`z-index` 2) so text stays perfectly crisp.
+
+**Glass tokens** (theme-aware, in `:root` / `.dark`):
+- **`--glass-fill`** — tint base: `255 255 255` (day) / `10 13 18` (night, = `glass-tint-dark`).
+- **`--glass-fill-a`** — fill opacity: `0.55` (day) / `0.58` (night). Translucent in **both** themes so the refraction actually shows and the panel reads as see-through over the dimmed page; the modal **backdrop scrim** (a true dark dim in both themes) carries readability, and dark ink over the white day fill still clears AA with room to spare even on a dimmed page.
+- **`--glass-rim` / `--glass-rim-a`** — lit hairline edge: white at `0.6` (day) / `0.22` (night).
+- **`--glass-blur`** — `16px` backdrop blur + `saturate(185%)`.
+- **`#glass-distortion`** — one shared SVG `feTurbulence` + `feDisplacementMap` (scale 28, no specular-lighting pass — tuned low for legibility and zero scroll jank), mounted once at the app root.
+
+**Variants:**
+- **`.glass-surface`** (alias `.surface-glass`) — frosted neutral surface for modals, the settings popover, search/filter popovers, and both date calendars. Carries `--shadow-float`.
+- **`.glass-accent`** — the green CTA. Brand fill at **80%** (hover 92%) on the element itself (its bare text node can't ride the pseudo-fill), backdrop blur, bright top specular, deep brand under-glow. Stays decisively green — a glass primary must never read paler than a secondary toggle.
+- **`.glass-quiet`** — secondary CTA. Translucent `--c-elevated` fill (55%, hover 74%) + blur + white rim, so it reads as frosted glass distinct from the page in both themes.
+- **`.glass-card`** — interactive option tiles (the decision modal's two choices). Translucent resting fill (40%, hover 56%) so the modal's refracted content shows through the tile; lifts and gains a green rim on hover.
+- **`.glass-well`** — a brand-tinted, recessed tray that backs an *inline* glass surface with no scrim behind it (the analysis-step calendar). Glass refracts what's behind it, so over the blank near-white page the frost has nothing to bend; the well supplies a faint green wash + a tint ring around the panel so the calendar reads as a glass slab floating on the desk rather than a flat white card. Pair it with a `.glass-surface` child.
+
+**Graceful degradation is mandatory.** Under `@supports not (backdrop-filter)` or `prefers-reduced-transparency: reduce`, every glass surface falls back to an **opaque** fill (no blur, no refraction) so nothing becomes unreadable. Reduced-motion is handled globally.
+
 ### Named Rules
+**The Glass-On-Chrome-Only Rule.** Liquid Glass is for layers that float *above* the page — modals, popovers, calendars, action buttons. It is **forbidden** on the reading layer: reports, dotted-leader rows, the verdict card, data tables. Coating data in glass breaks WCAG AA and the screenshot-ready identity. If content is behind glass, it's wrong.
+
+**The Decisive-Glass Rule.** A glass primary action (`.glass-accent`) carries the brand fill at ≥80% opacity. Translucency is the texture, not an excuse to wash the green out — the primary CTA must always be the most decisive green on screen, never paler than a selected date or an active toggle.
+
+**The Glass-Fallback Rule.** Every glass surface ships an opaque fallback for no-`backdrop-filter` and reduced-transparency. Never let the only path to a surface's fill be a blur the browser might not paint.
+
 **The No-Card-Stack Rule (still holds).** Surfaces gain depth, but a *report* still reads like a document: report facts are dotted-leader rows, not tiled stat cards, and cards are never nested inside cards. Depth is for genuine containers (panels, the verdict card, floating layers), not for tiling content into boxes.
 
 **The Surface-Over-Shadow Rule (night).** On the near-black ground a cast shadow is nearly invisible, so dark-mode elevation is carried by the lighter **surface gradient** (`--surface-raised` / `--surface-float` lift a step above the ground) plus the **top edge highlight** and a brighter hairline. A deep ambient shadow sits under floating layers only.
 
-## 5. Components
+## 5. Motion — iOS Spring Physics
+
+Motion here reads as native iOS, not as a web approximation of it. Five principles govern every animation, and they are enforced by a small spring-physics system that is shared between CSS and the Web Animations API so a button press and a modal entrance move under the *same* physics.
+
+1. **Spring physics over linear easing.** No `ease-in-out` anywhere on interactive motion. Five spring timing-functions (`--spring-press`, `--spring-modal`, `--spring-popover`, `--spring-reveal`, `--spring-settle`) are each the analytic response of a real (mass, stiffness, damping) spring, rendered as a `linear()` easing list. The durations are *as long as the physics takes to settle* (192–316 ms), not picked numbers — which is why they land in the 150–320 ms band where product motion feels native rather than laggy.
+2. **Tactile feedback.** Every pressable surface scales *down* a hair on active and snaps back via the press spring — a real object you push on doesn't overshoot, it returns. Three strengths: `.tactile` (0.975, the universal press), `.tactile-soft` (0.985, chrome controls — the close ×, tab links, day buttons), and `.tactile-deep` (0.97, the primary CTA). No bounce, no elastic.
+3. **Spatial awareness & depth.** Overlays animate *with* their depth: the modal rises + settles from 0.985→1 scale (the "iOS sheet" read), the settings popover expands from its top-right origin (the gear), the date popup from its input. The backdrop is a pure fade — a scrim has no position to spring from.
+4. **Interruptibility.** Modal, settings popover, and date popup enter/exit through the Web Animations API via the `useSpringPresence` hook. WAAPI is interruptible by construction: `element.animate()` cancels any animation already running on those properties, so toggling open/closed/open in quick succession just restarts the enter each time — no class-swap jank, no timer desync, the way iOS overlays always feel fluid.
+5. **Momentum & inertia.** `.ios-scroll` is the zero-cost baseline (`overscroll-behavior: contain` + `-webkit-overflow-scrolling: touch`). The `useElasticScroll` hook layers on the signature iOS rubber-band resistance (1/d diminishing curve + spring snap-back) on touch only — trackpads/mice scroll normally. It is applied only where a list genuinely scrolls with momentum (the attached-screenshots list).
+
+### Motion Tokens (see `index.css` + `src/lib/motion.js`)
+- **Spring curves** (`--spring-*`): five `linear()` easing lists, defined once in `:root` and mirrored as constants in `src/lib/motion.js` so WAAPI keyframes and CSS transitions share one body.
+- **Spring durations** (`--spring-*-dur`): the matching ms values, so a CSS `transition-duration` and a WAAPI `duration` never drift apart.
+- **`.tactile` / `.tactile-soft` / `.tactile-deep`**: the press affordances (§5.2). Apply to any click target that should read as a physical button.
+- **`.ios-scroll`**: contained, momentum-scrolling container. Pair with `useElasticScroll()` where touch rubber-banding is wanted.
+
+### Named Rules
+**The Spring-Only Rule.** Interactive motion uses the spring tokens exclusively. Generic `ease-in-out`, `ease`, and linear are forbidden on press/enter/exit — they read as mechanical next to the springs. (The one exception is the backdrop fade and exit easings, which use plain `ease-in`/`ease-out` because a pure opacity change has no spatial component to spring.)
+
+**The Press-Down Rule.** A pressable surface scales *down* on active (0.975–0.97), never up. iOS buttons compress into the surface; a scale-up reads as a hover, not a press. Hover is the only motion that lifts (−translate-y-px).
+
+**The Interruptible-Overlay Rule.** Any overlay that the user can toggle (modal, popover, popup) must enter and exit through `useSpringPresence`, not through a CSS class swap. Class swaps desync under rapid toggling; the WAAPI hook cancels-and-restarts atomically.
+
+**The Reduced-Motion Rule.** Every motion has a `prefers-reduced-motion: reduce` path. The springs collapse to near-instant (1 ms) crossfades via `withReducedMotion()`, the tactile press is neutralized, and `.ios-scroll`'s smooth scroll switches to auto — state still resolves, just without motion. This is non-optional accessibility, not a nicety.
+
+**The No-Decoration Rule.** Motion conveys state — feedback, reveal, loading, transition — never decoration. There is no page-load choreography (users are in a task and won't wait for it), and no fade-and-rise on every scrolled section. The one signature flourish is the liquid-glass material (§4); motion's job is to make the chrome feel native, not to perform.
+
+## 6. Components
 
 ### Buttons
-- **Shape:** gently rounded (6–8px; `rounded-md`). Pills (`rounded-full`) for segmented toggles.
-- **Primary:** green fill (`brand`) with `on-brand` dark text, ~10×20px padding. Hover → `brand-deep` and a 1px lift; active → settle + 0.98 scale. Disabled → 45% opacity with an adjacent muted hint that explains what unlocks it (never an `alert()`).
-- **Quiet:** bordered, `ink-muted` text, transparent fill; hover firms the border and ink. The secondary affordance throughout.
+- **Shape:** the liquid-glass action buttons are **fully-rounded pills** (`rounded-full`) — the green primary and the quiet secondary share one pill form so the pair reads as a single material (see §4 Liquid Glass). Segmented toggles and verdict chips are also pills; flat `rounded-md` remains the form for inputs and chrome-less buttons.
+- **Primary:** the green CTA is the liquid-glass `.glass-accent` material — brand fill at ≥84% opacity (hover 92%) with `on-brand` dark text, backdrop blur, a lit top rim, a deep brand under-glow, and a **soft ambient halo** (two wide, low-opacity brand glows) bleeding past the pill edge — the signature of the liquid-glass read, ~10×24px padding. Hover → halo brightens + 1px lift; active → settle + 0.97 scale via `.tactile-deep` (see §5 Motion). Disabled/in-flight → halo drops (no green radiation when non-actionable) at 45% opacity, with an adjacent muted hint that explains what unlocks it (never an `alert()`). Stays the most decisive green on screen — never paler than a selected date or active toggle (see Decisive-Glass, §4).
+- **Quiet:** the secondary affordance throughout — the `.glass-quiet` material: a pill matching the primary's shape + ambient-halo vocabulary, translucent `--c-elevated` fill (58%, hover 76%) + blur + white rim, with a **neutral** halo (ink-tinted light / soft black night — never green) so it reads as the frosted sibling, not a second CTA. `ink-muted` text that firms to `ink` on hover. Carries `.tactile-soft` for its press (§5). Distinct from the page in both themes.
+- **Focus:** glass pills carry an ink focus ring that follows the pill shape (`outline-offset: 3px`, `border-radius: 9999px`) — the default brand-green ring would be invisible on the green fill and sharp-cornered around the pill.
 - **Loading:** an `on-brand` spinner replaces motion inside the same button — no layout shift, no centered overlay spinner.
 
 ### Chips / Pills
@@ -225,12 +286,15 @@ The whole system is driven by tokens + two reusable classes in `index.css`, so d
 A three-stop progress rail (Select Date · Run Screening · Refine with Brokers). Active stop = green fill with `on-brand` number; done = `pos-tint` with a check; todo = `well` + muted. It frames the screening flow as an authored sequence.
 
 ### Settings Popover (signature)
-Gear button in the top-right opens an `elevated` popover holding the **theme toggle** (Light/Dark, sun/moon, active = green fill + `on-brand`) and the **language switcher** (EN/ID with drawn SVG flags). Closes on `pointerdown` outside or Escape; touch targets ≥44px; capped to the viewport on narrow phones.
+Gear button in the top-right opens a **liquid-glass** (`.glass-surface`) popover holding the **theme toggle** (Light/Dark, sun/moon, active = green fill + `on-brand`) and the **language switcher** (EN/ID with drawn SVG flags). Closes on `pointerdown` outside or Escape; touch targets ≥44px; capped to the viewport on narrow phones.
+
+### Liquid Glass Surfaces (signature)
+The floating-chrome material (see §4). Every modal, the settings popover, search/filter popovers, and both date calendars are `.glass-surface`: a frosted, lightly refractive sheet. Most float over a dark backdrop scrim (`bg-black/55`) that gives the frost something to refract and carries readability; the one *inline* surface with no scrim — the analysis-step calendar — sits in a `.glass-well` tinted tray so it still reads as glass. The decision modal's two choices are `.glass-card` tiles that lift and gain a green rim on hover. Real content rides above the glass at `z-index 2` so text stays crisp; an opaque fallback ships for browsers without `backdrop-filter` and for `prefers-reduced-transparency`. This material is the app's one signature flourish — and it is confined to chrome: it never coats a report, a dotted-leader row, or a data table.
 
 ### Dotted-Leader Row (signature)
 The typographic spine: `muted label · dotted leader · tabular value`, value optionally toned by verdict. Every report fact is one of these — it is what makes a cropped screenshot read like research.
 
-## 6. Do's and Don'ts
+## 7. Do's and Don'ts
 
 ### Do:
 - **Do** carry `on-brand` (`#08130d`) text on every green fill; reach for `brand-strong` when green must be text. Never white on green.
@@ -240,6 +304,10 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 - **Do** give real containers depth via `.surface-raised` / `.surface-float` (gradient sheen + soft tinted shadow + edge highlight), not flat fills.
 - **Do** carry night-mode elevation with the lighter surface gradient + top edge highlight + brighter hairline; reserve deep ambient shadow for floating layers.
 - **Do** keep paper surfaces near-neutral and let the `--canvas` carry only a faint brand-green atmospheric lift — identity stays in the green, type, and data.
+- **Do** reserve the liquid-glass material (`.glass-*`, §4) for floating chrome only — modals, popovers, both calendars, and the primary/secondary action buttons — with content lifted above the glass and an opaque fallback for unsupported browsers.
+- **Do** use the spring tokens (`--spring-*`, §5) for all interactive motion, and the `.tactile` utilities for press feedback — a press scales *down* (0.975–0.97) and snaps back via the press spring, never up.
+- **Do** route every toggleable overlay (modal, popover, popup) through `useSpringPresence` so its enter/exit is interruptible — reopening mid-exit must cancel and restart cleanly (§5).
+- **Do** ship a `prefers-reduced-motion: reduce` path for every animation — near-instant crossfades, no press scale, no smooth scroll. Non-optional.
 
 ### Don't:
 - **Don't** reproduce **Bloomberg-terminal clutter** — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.
@@ -247,5 +315,9 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 - **Don't** ship a **generic indigo SaaS dashboard** — the one accent is Stockbit green, never default Tailwind blue/indigo.
 - **Don't** nest cards inside cards or tile the report into identical stat boxes — depth is for genuine containers, not for boxing every fact.
 - **Don't** tint the ground *warm/cream* or use a fluid `clamp()` display scale (the only canvas tint allowed is the brand green).
-- **Don't** let depth get loud — no glassmorphism, neon glow, or heavy drop shadows; keep it the soft, refined layered system.
+- **Don't** put glass on the reading layer — no glassmorphism on reports, dotted-leader rows, the verdict card, or data tables. The liquid-glass material (§4) is **only** for floating chrome (modals, popovers, calendars, action buttons); content stays opaque and screenshot-legible.
+- **Don't** wash the green out — a glass primary (`.glass-accent`) holds brand fill at ≥80%; translucency is the texture, never an excuse to dim the CTA below a selected date or active toggle.
+- **Don't** let depth get loud — no neon glow or heavy drop shadows; keep it the soft, refined layered system, and ship an opaque fallback for every glass surface.
+- **Don't** use `ease-in-out`, `ease`, or linear on press/enter/exit motion — the spring tokens (§5) are the only curves for interactive motion. Generic easings read as mechanical next to them.
+- **Don't** add decorative motion — no page-load choreography, no fade-and-rise on every scrolled section. Motion conveys state (feedback, reveal, loading, transition), nothing else.
 - **Don't** rely on color alone, hover alone, or shadow alone to carry meaning.

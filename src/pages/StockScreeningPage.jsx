@@ -12,6 +12,7 @@ import {
 import { Stepper } from '../components/Stepper';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
+import { LiquidGlass } from '../components/LiquidGlass';
 import { BrokerActionGauge, BrokerActionColumns } from '../components/BrokerAction';
 import { ratingFromScore, toScoreTen, formatPct, formatRp } from '../lib/analysis';
 import { screeningStage1, screeningStage2, diagnoseStock } from '../lib/screeningService';
@@ -21,6 +22,8 @@ import { conglomerateGroup } from '../data/conglomerates';
 import { fetchMacro, summarizeMacro } from '../lib/macro';
 import { claudeAIService } from '../lib/claudeAI';
 import { useLang, useT } from '../lib/i18n';
+import { useSpringPresence } from '../lib/useSpringPresence';
+import { presets } from '../lib/motion';
 
 const SAVED_KEY = 'idx-screenings';
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -124,6 +127,14 @@ function WhyNotRecommended({ date, filters, results }) {
 
   const categoryLabel = getCategory(filters.category).label;
 
+  // Interruptible presence for the suggestion dropdown (same treatment as the
+  // main ticker search). Animates on empty↔non-empty, not per keystroke.
+  const { mounted: suggestionsMounted, nodeRef: suggestionsRef } = useSpringPresence(
+    suggestions.length > 0,
+    presets.popoverEnter,
+    presets.popoverExit,
+  );
+
   const onChange = (e) => {
     const v = e.target.value.toUpperCase();
     setQuery(v);
@@ -200,22 +211,32 @@ function WhyNotRecommended({ date, filters, results }) {
           placeholder={t('Check a ticker — e.g. “ASII”', 'Periksa kode saham — mis. “ASII”')}
           role="combobox"
           aria-expanded={suggestions.length > 0}
+          aria-controls="screening-ticker-suggestions"
+          aria-activedescendant={active >= 0 ? `screening-ticker-option-${active}` : undefined}
           aria-autocomplete="list"
           className="w-full rounded-xl border border-line bg-paper py-2.5 pl-10 pr-4 font-mono text-sm text-ink shadow-sm shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
-        {suggestions.length > 0 && (
+        {suggestionsMounted && suggestions.length > 0 && (
           <ul
+            ref={suggestionsRef}
+            id="screening-ticker-suggestions"
             role="listbox"
-            className="surface-float dropdown-enter absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line bg-elevated py-1.5"
+            style={{ transformOrigin: 'top center' }}
+            className="surface-glass glass-morph absolute left-0 right-0 z-dropdown mt-2 max-h-60 overflow-y-auto rounded-xl border border-line py-1.5"
           >
             {suggestions.map((s, index) => (
-              <li key={s.code} role="option" aria-selected={index === active}>
+              <li
+                key={s.code}
+                id={`screening-ticker-option-${index}`}
+                role="option"
+                aria-selected={index === active}
+              >
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => run(s.code)}
                   onMouseEnter={() => setActive(index)}
-                  className={`flex w-full items-baseline gap-3 px-3.5 py-2 text-left transition-colors duration-150 ${
+                  className={`tactile-soft flex w-full items-baseline gap-3 px-3.5 py-2 text-left ${
                     index === active ? 'bg-well' : ''
                   }`}
                 >
@@ -290,6 +311,16 @@ export default function StockScreeningPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newScreeningConfirmOpen, setNewScreeningConfirmOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Interruptible popover presence: the Filters panel scales+fades from its
+  // trigger (the Filters button), matching the settings popover and date
+  // popup. Reopening mid-close cancels the close cleanly. The click-away
+  // scrim below stays; only the enter/exit is now spring-driven.
+  const { mounted: filtersMounted, nodeRef: filtersPanelRef } = useSpringPresence(
+    filtersOpen,
+    presets.popoverEnter,
+    presets.popoverExit,
+  );
 
   // Stepper state
   const [stage, setStage] = useState('date'); // 'date' → 'screening' → 'refine'
@@ -802,16 +833,18 @@ export default function StockScreeningPage() {
                 )}
               </p>
 
-              <button
+              <LiquidGlass
+                as="button"
+                variant="accent"
                 type="button"
                 onClick={() => setDateModalOpen(true)}
-                className="mt-7 inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-brand bg-gradient-to-b from-brand to-brand-deep px-8 text-base font-medium text-on-brand shadow-[0_6px_20px_-6px_color-mix(in_srgb,var(--c-brand)_60%,transparent)] transition-[background-image,box-shadow,transform,opacity] duration-200 hover:from-brand-deep hover:to-brand-deep hover:shadow-[0_13px_32px_-8px_color-mix(in_srgb,var(--c-brand)_74%,transparent)] hover:scale-[1.02] active:scale-[0.95] sm:mt-8"
+                className="tactile-deep mt-7 inline-flex min-h-12 items-center gap-2.5 rounded-full px-8 text-base font-medium hover:-translate-y-px sm:mt-8"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
                 </svg>
                 {t('Run Screening', 'Jalankan Penyaringan')}
-              </button>
+              </LiquidGlass>
 
               {/* Filters sit below the CTA, behind one button, so the hero stays
                   uncluttered. The panel holds strategy + every refinement.
@@ -822,7 +855,7 @@ export default function StockScreeningPage() {
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   aria-expanded={filtersOpen}
-                  className="surface-raised inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-[color,border-color,transform,box-shadow] hover:border-ink-muted/50 hover:text-ink hover:scale-[1.02] active:scale-[0.95]"
+                  className="tactile-soft surface-raised inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted hover:border-ink-muted/50 hover:text-ink hover:-translate-y-px"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
@@ -839,7 +872,12 @@ export default function StockScreeningPage() {
                   <>
                     {/* click-away */}
                     <div className="fixed inset-0 z-dropdown" onClick={() => setFiltersOpen(false)} aria-hidden="true" />
-                    <div className="surface-float dropdown-enter absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-elevated p-5 text-left">
+                    {filtersMounted && (
+                    <div
+                      ref={filtersPanelRef}
+                      style={{ transformOrigin: 'top center' }}
+                      className="surface-glass absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line p-5 text-left"
+                    >
                       <div className="space-y-4">
                         <div className="space-y-1.5">
                           <FieldLabel htmlFor="category-filter">{t('Strategy', 'Strategi')}</FieldLabel>
@@ -873,9 +911,9 @@ export default function StockScreeningPage() {
                                   key={n}
                                   type="button"
                                   onClick={() => setNumStocks(n)}
-                                  className={`rounded-md px-2.5 py-1 text-sm font-medium tabular-nums transition-colors ${
+                                  className={`tactile-soft rounded-md px-2.5 py-1 text-sm font-medium tabular-nums ${
                                     numStocks === n ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                  } hover:scale-[1.02] active:scale-[0.95]`}
+                                  }`}
                                 >
                                   {n}
                                 </button>
@@ -894,9 +932,9 @@ export default function StockScreeningPage() {
                                   key={m.value}
                                   type="button"
                                   onClick={() => setAnalysisMode(m.value)}
-                                  className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
+                                  className={`tactile-soft rounded-md px-2.5 py-1 text-sm font-medium ${
                                     analysisMode === m.value ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                  } hover:scale-[1.02] active:scale-[0.95]`}
+                                  }`}
                                 >
                                   {m.label}
                                 </button>
@@ -928,9 +966,9 @@ export default function StockScreeningPage() {
                                       );
                                     }
                                   }}
-                                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                  className={`tactile-soft rounded-md px-2.5 py-1 text-xs font-medium ${
                                     active ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                  } hover:scale-[1.02] active:scale-[0.95]`}
+                                  }`}
                                 >
                                   {tier.label}
                                 </button>
@@ -976,6 +1014,7 @@ export default function StockScreeningPage() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1024,7 +1063,7 @@ export default function StockScreeningPage() {
           <button
             type="button"
             onClick={() => setDateModalOpen(true)}
-            className="mt-6 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-on-brand transition-colors hover:bg-brand-deep active:scale-[0.95]"
+            className="tactile-deep mt-6 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-on-brand hover:bg-brand-deep hover:-translate-y-px"
           >
             {t('Try again', 'Coba lagi')}
           </button>
@@ -1109,9 +1148,18 @@ export default function StockScreeningPage() {
                   )}
                   <span className="w-20 text-right font-mono text-sm tabular-nums">{formatRp(s.close)}</span>
                 </div>
-                {expanded && s.bandarmology && (
-                  <div className="pb-3 pl-8 pr-1">
-                    <BandarSummary bandar={s.bandarmology} />
+                {/* Inline broker-summary expansion. Always rendered so the
+                    grid-template-rows collapse can animate 0fr→1fr (unmounting
+                    on collapse would leave no node to transition). Uses the same
+                    .details-collapse treatment as the report's details section. */}
+                {s.bandarmology && (
+                  <div
+                    className={`details-collapse details-collapse-tight ${expanded ? 'details-collapse-open' : ''}`}
+                    aria-hidden={!expanded}
+                  >
+                    <div className="pb-3 pl-8 pr-1">
+                      <BandarSummary bandar={s.bandarmology} />
+                    </div>
                   </div>
                 )}
               </li>
@@ -1335,7 +1383,7 @@ export default function StockScreeningPage() {
           'Meja riset membaca pergerakan harga hingga dan termasuk sesi ini.',
         )}
       >
-        <div className="rounded-xl border border-line p-4">
+        <div className="pt-1">
           <DatePicker inline value={asOfDate} max={TODAY} onChange={handleDatePicked} />
         </div>
         <p className="mt-4 text-center text-xs text-ink-muted">

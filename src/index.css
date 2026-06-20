@@ -7,6 +7,35 @@
     --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
+    /* ===== Spring physics (iOS HIG) =====
+       Five spring timing-functions, each the analytic response of a real
+       (mass, stiffness, damping) spring rendered as a `linear()` easing list.
+       These are the ONLY curves used for interactive motion — generic ease-in-out
+       reads as mechanical next to them. Durations are "as long as the physics
+       takes to settle", not picked numbers, which is why they fall in the
+       190–320ms band where product motion feels native rather than laggy.
+
+       The same constants are mirrored in src/lib/motion.js so WAAPI animations
+       (modal/popover presence) share one body with these CSS transitions.
+
+       --spring-press   (192ms) tap-down on a pressable surface
+       --spring-modal   (284ms) a floating layer rising into place
+       --spring-popover (304ms) lighter chrome expanding from a trigger
+       --spring-reveal  (288ms) list items + route panels lifting in
+       --spring-settle  (316ms) a control gliding between slots */
+    --spring-press: linear(0.00000 0.00%, 0.00620 3.33%, 0.02343 6.67%, 0.04980 10.00%, 0.08359 13.33%, 0.12326 16.67%, 0.16742 20.00%, 0.21485 23.33%, 0.26448 26.67%, 0.31537 30.00%, 0.36672 33.33%, 0.41784 36.67%, 0.46814 40.00%, 0.51715 43.33%, 0.56447 46.67%, 0.60979 50.00%, 0.65286 53.33%, 0.69352 56.67%, 0.73165 60.00%, 0.76717 63.33%, 0.80005 66.67%, 0.83030 70.00%, 0.85796 73.33%, 0.88310 76.67%, 0.90579 80.00%, 0.92614 83.33%, 0.94426 86.67%, 0.96027 90.00%, 0.97431 93.33%, 0.98651 96.67%, 0.99700 100.00%);
+    --spring-modal: linear(0.00000 0.00%, 0.00635 3.33%, 0.02397 6.67%, 0.05088 10.00%, 0.08529 13.33%, 0.12561 16.67%, 0.17040 20.00%, 0.21841 23.33%, 0.26856 26.67%, 0.31988 30.00%, 0.37155 33.33%, 0.42289 36.67%, 0.47331 40.00%, 0.52233 43.33%, 0.56957 46.67%, 0.61472 50.00%, 0.65755 53.33%, 0.69791 56.67%, 0.73566 60.00%, 0.77077 63.33%, 0.80321 66.67%, 0.83299 70.00%, 0.86017 73.33%, 0.88482 76.67%, 0.90703 80.00%, 0.92690 83.33%, 0.94457 86.67%, 0.96015 90.00%, 0.97378 93.33%, 0.98560 96.67%, 0.99575 100.00%);
+    --spring-popover: linear(0.00000 0.00%, 0.00994 3.33%, 0.03665 6.67%, 0.07601 10.00%, 0.12452 13.33%, 0.17929 16.67%, 0.23791 20.00%, 0.29844 23.33%, 0.35931 26.67%, 0.41928 30.00%, 0.47740 33.33%, 0.53296 36.67%, 0.58544 40.00%, 0.63452 43.33%, 0.67999 46.67%, 0.72175 50.00%, 0.75982 53.33%, 0.79425 56.67%, 0.82519 60.00%, 0.85278 63.33%, 0.87723 66.67%, 0.89875 70.00%, 0.91756 73.33%, 0.93388 76.67%, 0.94794 80.00%, 0.95997 83.33%, 0.97016 86.67%, 0.97872 90.00%, 0.98584 93.33%, 0.99169 96.67%, 0.99644 100.00%);
+    --spring-reveal: linear(0.00000 0.00%, 0.00735 3.33%, 0.02754 6.67%, 0.05805 10.00%, 0.09664 13.33%, 0.14135 16.67%, 0.19048 20.00%, 0.24254 23.33%, 0.29630 26.67%, 0.35068 30.00%, 0.40480 33.33%, 0.45795 36.67%, 0.50952 40.00%, 0.55907 43.33%, 0.60624 46.67%, 0.65078 50.00%, 0.69251 53.33%, 0.73132 56.67%, 0.76718 60.00%, 0.80009 63.33%, 0.83010 66.67%, 0.85728 70.00%, 0.88175 73.33%, 0.90362 76.67%, 0.92305 80.00%, 0.94018 83.33%, 0.95517 86.67%, 0.96817 90.00%, 0.97936 93.33%, 0.98889 96.67%, 0.99691 100.00%);
+    --spring-settle: linear(0.00000 0.00%, 0.00629 3.33%, 0.02377 6.67%, 0.05048 10.00%, 0.08468 13.33%, 0.12477 16.67%, 0.16936 20.00%, 0.21719 23.33%, 0.26719 26.67%, 0.31840 30.00%, 0.37002 33.33%, 0.42133 36.67%, 0.47178 40.00%, 0.52086 43.33%, 0.56819 46.67%, 0.61347 50.00%, 0.65646 53.33%, 0.69698 56.67%, 0.73493 60.00%, 0.77023 63.33%, 0.80288 66.67%, 0.83287 70.00%, 0.86025 73.33%, 0.88510 76.67%, 0.90750 80.00%, 0.92756 83.33%, 0.94540 86.67%, 0.96113 90.00%, 0.97491 93.33%, 0.98685 96.67%, 0.99710 100.00%);
+    /* Mirror the spring durations as plain ms so WAAPI keyframes (driven from JS)
+       and CSS transitions stay in lockstep without duplicating the constants. */
+    --spring-press-dur: 192ms;
+    --spring-modal-dur: 284ms;
+    --spring-popover-dur: 304ms;
+    --spring-reveal-dur: 288ms;
+    --spring-settle-dur: 316ms;
+
     /* ===== Light theme — Stockbit "day" palette ===== */
     /* Surfaces */
     --c-paper: #ffffff;
@@ -47,6 +76,18 @@
     /* Canvas atmosphere: a near-white ground that lifts toward the top with a
        whisper of the brand hue, so the page reads as lit, not paper-flat. */
     --canvas: radial-gradient(130% 70% at 50% -8%, color-mix(in srgb, var(--c-brand) 5%, #ffffff) 0%, #ffffff 36%, #f4f7f9 100%);
+
+    /* ===== Liquid Glass (light) =====
+       Theme tokens for the isolated frosted-glass chrome. The fill is
+       translucent in BOTH themes so the refraction actually shows — the dark
+       modal backdrop scrim carries readability, and dark ink over this
+       white fill (even on a dimmed page) clears AA with room to spare. The
+       rim is a bright hairline and the specular is white. */
+    --glass-fill: 255 255 255;
+    --glass-fill-a: 0.55;
+    --glass-rim: 255 255 255;
+    --glass-rim-a: 0.6;
+    --glass-blur: 16px;
   }
 
   .dark {
@@ -88,6 +129,14 @@
     --shadow-float: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 18px 44px -12px rgb(0 0 0 / 0.85);
     --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.06);
     --canvas: radial-gradient(130% 70% at 50% -8%, color-mix(in srgb, var(--c-brand) 9%, #12161b) 0%, #0f1216 40%, #0d0f12 100%);
+
+    /* ===== Liquid Glass (night) =====
+       Dark slate fill at lower opacity (the night ground gives plenty of
+       contrast), with a faint white rim/specular for the lit-glass edge. */
+    --glass-fill: 10 13 18;
+    --glass-fill-a: 0.58;
+    --glass-rim: 255 255 255;
+    --glass-rim-a: 0.22;
   }
 
   body {
@@ -118,6 +167,24 @@
     border-radius: 2px;
   }
 
+  /* Glass pills (`.glass-accent`, `.glass-quiet`) are fully-rounded, so the
+     default 2px-radius focus ring would draw a sharp rectangle around them; and
+     a brand-green ring is invisible on the brand-green CTA fill. Override: the
+     ring follows the pill shape and uses the ink hue, which clears AA on green
+     (light) and on the dark quiet fill (night). The accent's green halo stays
+     visible through the offset, so focus reads as a crisp outline, not a lost
+     one. */
+  .glass-accent:focus-visible,
+  .glass-quiet:focus-visible {
+    outline: 2px solid var(--c-ink);
+    outline-offset: 3px;
+    border-radius: 9999px;
+  }
+  .dark .glass-accent:focus-visible,
+  .dark .glass-quiet:focus-visible {
+    outline-color: #eef1f4;
+  }
+
   h1, h2, h3 {
     text-wrap: balance;
   }
@@ -127,9 +194,10 @@
   }
 
 
-  /* Staggered animation for list items */
+  /* Staggered animation for list items — spring-reveal so each row lifts with
+     the same physics as the report and route panels. */
   .list-item-enter {
-    animation: list-item-slide-in 240ms var(--ease-out-quint) both;
+    animation: list-item-slide-in var(--spring-reveal-dur) var(--spring-reveal) both;
     animation-delay: calc(var(--i, 0) * 35ms);
   }
 
@@ -144,10 +212,10 @@
     }
   }
 
-  /* Dropdown menu entrance */
+  /* Dropdown menu entrance — spring-popover reads as expanding from the trigger. */
   .dropdown-enter {
-    animation: dropdown-slide-down 180ms var(--ease-out-quint) both;
-    transform-origin: top;
+    animation: dropdown-slide-down var(--spring-popover-dur) var(--spring-popover) both;
+    transform-origin: top right;
   }
 
   @keyframes dropdown-slide-down {
@@ -172,12 +240,12 @@
   }
 
   .route-panel {
-    animation: route-panel-in 220ms var(--ease-out-quint) both;
+    animation: route-panel-in var(--spring-reveal-dur) var(--spring-reveal) both;
   }
 
   /* Table row animations for results */
   .result-row-enter {
-    animation: result-row-slide-in 320ms var(--ease-out-quint) both;
+    animation: result-row-slide-in var(--spring-reveal-dur) var(--spring-reveal) both;
     animation-delay: calc(min(var(--i, 0), 9) * 35ms);
   }
 
@@ -212,9 +280,12 @@
     }
   }
 
-  /* Enhanced modal animations */
+  /* Enhanced modal animations — these are now a CSS fallback for the WAAPI
+     presence hook in useSpringPresence.js (which drives the modal enter/exit
+     with the real modal spring). The WAAPI path is interruptible; these
+     classes keep a sane animation if JS is disabled or the hook isn't used. */
   .modal-enter {
-    animation: modal-rise 240ms var(--ease-out-quint) both;
+    animation: modal-rise var(--spring-modal-dur) var(--spring-modal) both;
   }
 
   .modal-enter-backdrop {
@@ -284,6 +355,367 @@
     box-shadow: var(--shadow-float);
   }
 
+  /* ===== Liquid Glass — isolated floating chrome only =====
+     Apple-style frosted glass for a deliberately small set of floating
+     elements (the Run Screening CTA, the settings popover, the date-picker
+     modal, the decision modal + its option cards). NEVER the page background,
+     body, layout wrappers, or report/content surfaces — coating data in glass
+     breaks legibility and the screenshot-ready identity.
+
+     Two stacked pseudo-layers give real depth without distorting text:
+       ::before — the refraction layer: a blurred backdrop bent by the
+                  #glass-distortion SVG filter (subtle lensing, not just blur).
+       ::after  — the translucent tint fill + inset specular highlight.
+     Direct children are lifted above both so text stays perfectly crisp.
+     `.surface-glass`/`.glass-morph` are kept as aliases so the existing page
+     popovers that already reference them pick up the same material. */
+  .glass-surface,
+  .surface-glass,
+  .glass-card {
+    position: relative;
+    isolation: isolate;
+    background-color: transparent;
+    border: 1px solid rgb(var(--glass-rim) / var(--glass-rim-a));
+  }
+
+  .glass-surface::before,
+  .surface-glass::before,
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    backdrop-filter: blur(var(--glass-blur)) saturate(185%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(185%);
+    filter: url(#glass-distortion);
+    pointer-events: none;
+  }
+
+  .glass-surface::after,
+  .surface-glass::after,
+  .glass-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    background-color: rgb(var(--glass-fill) / var(--glass-fill-a));
+    box-shadow:
+      inset 1.5px 1.5px 1px rgb(255 255 255 / 0.5),
+      inset -1px -1px 1px rgb(255 255 255 / 0.22);
+    pointer-events: none;
+    transition: background-color 200ms var(--ease-out-quint);
+  }
+
+  /* Keep all real content above the two glass layers. */
+  .glass-surface > *,
+  .surface-glass > *,
+  .glass-card > * {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Surface (modals + settings popover): floating-layer drop shadow. */
+  .glass-surface,
+  .surface-glass {
+    box-shadow: var(--shadow-float);
+  }
+
+  /* A lit diagonal sheen so the surface reads as glass even over a near-uniform
+     dark backdrop: more translucent at the top-left (lets the refracted page
+     bleed through = the "liquid" cue) and more opaque toward the body where the
+     text lives. Brighter top edge + corner specular sell the lit-glass slab.
+     Scoped to the surface variant so `.glass-card`'s flat fill + hover keep
+     working. */
+  .glass-surface::after,
+  .surface-glass::after {
+    background-image: linear-gradient(
+      155deg,
+      rgb(var(--glass-fill) / calc(var(--glass-fill-a) - 0.18)) 0%,
+      rgb(var(--glass-fill) / var(--glass-fill-a)) 48%,
+      rgb(var(--glass-fill) / min(calc(var(--glass-fill-a) + 0.06), 1)) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 2px 2px 1px rgb(255 255 255 / 0.6),
+      inset -1px -1px 1px rgb(255 255 255 / 0.25);
+  }
+
+  /* Card (the two decision option buttons): lighter resting fill that lifts and
+     gains a green rim on hover — an interactive liquid-glass tile. */
+  .glass-card {
+    --glass-fill-a: 0.4;
+    box-shadow: var(--shadow-raised);
+    transition:
+      transform 200ms var(--ease-out-quint),
+      border-color 200ms var(--ease-out-quint),
+      box-shadow 200ms var(--ease-out-quint);
+  }
+  .glass-card:hover {
+    border-color: color-mix(in srgb, var(--c-brand) 55%, transparent);
+    box-shadow:
+      var(--shadow-float),
+      0 0 0 1px color-mix(in srgb, var(--c-brand) 28%, transparent);
+  }
+  .glass-card:hover::after {
+    background-color: rgb(var(--glass-fill) / 0.56);
+  }
+
+  /* A subtly brand-tinted, recessed tray for an INLINE glass surface that has
+     no dark scrim behind it (the analysis-step calendar). Liquid glass refracts
+     whatever sits behind it, so over the blank near-white page the frost has
+     nothing to bend and reads as a flat white card. This well gives it a faint
+     green wash + a tint ring around the panel, so the calendar reads as a glass
+     slab floating on the desk. Theme-aware; pair it with a `.glass-surface`
+     child. */
+  .glass-well {
+    border-radius: 20px;
+    padding: 14px;
+    background-image:
+      radial-gradient(125% 90% at 50% 0%, color-mix(in srgb, var(--c-brand) 13%, transparent) 0%, transparent 62%),
+      linear-gradient(158deg, var(--c-brand-tint) 0%, var(--c-well) 100%);
+    border: 1px solid var(--c-line);
+    box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.07);
+  }
+
+  /* Accent (the green CTAs — Run Screening, Get the verdict, Run live check): a
+     vibrant brand-tinted glass rendered as a rounded-full pill. The fill lives
+     on the element itself (its only direct text child is a bare text node, so
+     the layered-pseudo trick can't lift it). The new "liquid glass" read comes
+     from a soft AMBIENT HALO that bleeds past the pill edge — two wide,
+     low-opacity brand-tinted outer glows stacked under a lit top rim and a deep
+     brand under-glow. The halo is the signature; translucency + backdrop blur
+     are the texture. Stays decisively green (≥84% fill) per the Decisive-Glass
+     rule, with on-brand dark text. */
+  .glass-accent {
+    color: var(--c-on-brand);
+    border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--c-brand) 84%, transparent);
+    backdrop-filter: blur(10px) saturate(190%);
+    -webkit-backdrop-filter: blur(10px) saturate(190%);
+    border: 1px solid color-mix(in srgb, #ffffff 45%, transparent);
+    box-shadow:
+      /* ambient halo — soft glow bleeding past the pill edge */
+      0 10px 30px -8px color-mix(in srgb, var(--c-brand) 55%, transparent),
+      0 4px 14px -6px color-mix(in srgb, var(--c-brand) 40%, transparent),
+      /* lit top rim + deep brand under-glow sell the slab */
+      inset 1.5px 1.5px 1px rgb(255 255 255 / 0.6),
+      inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 60%, transparent);
+    transition:
+      background-color 200ms var(--ease-out-quint),
+      box-shadow 200ms var(--ease-out-quint),
+      transform 200ms var(--ease-out-quint);
+  }
+  .glass-accent:hover {
+    background-color: color-mix(in srgb, var(--c-brand) 92%, transparent);
+    box-shadow:
+      0 16px 44px -8px color-mix(in srgb, var(--c-brand) 72%, transparent),
+      0 6px 18px -6px color-mix(in srgb, var(--c-brand) 50%, transparent),
+      inset 1.5px 1.5px 1px rgb(255 255 255 / 0.72),
+      inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 70%, transparent);
+  }
+  /* Night: the near-black ground swallows faint color, so push the halo brighter
+     and a touch wider so the green glow still registers as "liquid glass". */
+  .dark .glass-accent {
+    box-shadow:
+      0 12px 34px -8px color-mix(in srgb, var(--c-brand) 62%, transparent),
+      0 4px 16px -6px color-mix(in srgb, var(--c-brand) 48%, transparent),
+      inset 1.5px 1.5px 1px rgb(255 255 255 / 0.5),
+      inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 60%, transparent);
+  }
+  .dark .glass-accent:hover {
+    box-shadow:
+      0 18px 50px -8px color-mix(in srgb, var(--c-brand) 78%, transparent),
+      0 6px 20px -6px color-mix(in srgb, var(--c-brand) 58%, transparent),
+      inset 1.5px 1.5px 1px rgb(255 255 255 / 0.65),
+      inset 0 -3px 8px -2px color-mix(in srgb, var(--c-brand-deep) 72%, transparent);
+  }
+  /* Disabled / in-flight: drop the ambient halo so a non-actionable CTA stops
+     radiating green. The opacity the component sets carries the "unavailable"
+     read; leaving the halo lit would make a disabled button feel dimmed-but-
+     important. Keep the lit rim faint so the pill still reads as a shape. */
+  .glass-accent:disabled,
+  .glass-accent:disabled:hover,
+  .glass-accent[aria-busy="true"] {
+    background-color: color-mix(in srgb, var(--c-brand) 60%, transparent);
+    backdrop-filter: blur(8px) saturate(140%);
+    -webkit-backdrop-filter: blur(8px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      inset 0 -2px 6px -2px color-mix(in srgb, var(--c-brand-deep) 40%, transparent);
+    cursor: not-allowed;
+  }
+
+  /* Quiet (secondary CTAs — Add screenshots, New analysis): a neutral
+     frosted-glass sibling to `.glass-accent`, now matching its pill shape +
+     ambient-halo vocabulary so the pair reads as one material. Fill rides on
+     the element itself (text-node safe), tinted from `--c-elevated` so it reads
+     as frosted glass distinct from the page in BOTH themes (translucent white
+     in light, translucent elevated-grey in dark). The halo is neutral ink-tinted
+     (light) / soft black (night) — never green — so it stays a quiet secondary,
+     not a second CTA. */
+  .glass-quiet {
+    border-radius: 9999px;
+    background-color: color-mix(in srgb, var(--c-elevated) 58%, transparent);
+    backdrop-filter: blur(12px) saturate(170%);
+    -webkit-backdrop-filter: blur(12px) saturate(170%);
+    border: 1px solid rgb(var(--glass-rim) / var(--glass-rim-a));
+    box-shadow:
+      /* ambient halo — soft, neutral, bleeding past the pill edge */
+      0 8px 22px -8px rgb(22 24 28 / 0.28),
+      0 3px 10px -6px rgb(22 24 28 / 0.18),
+      /* lit top rim + inner sheen */
+      var(--shadow-raised),
+      inset 0 1px 0 rgb(255 255 255 / 0.32),
+      inset 1px 1px 1px rgb(255 255 255 / 0.2);
+    transition:
+      background-color 200ms var(--ease-out-quint),
+      border-color 200ms var(--ease-out-quint),
+      color 200ms var(--ease-out-quint),
+      box-shadow 200ms var(--ease-out-quint),
+      transform 200ms var(--ease-out-quint);
+  }
+  .glass-quiet:hover {
+    background-color: color-mix(in srgb, var(--c-elevated) 76%, transparent);
+    border-color: color-mix(in srgb, var(--c-ink-muted) 38%, transparent);
+    box-shadow:
+      0 12px 30px -8px rgb(22 24 28 / 0.36),
+      0 4px 12px -6px rgb(22 24 28 / 0.22),
+      var(--shadow-float),
+      inset 0 1px 0 rgb(255 255 255 / 0.38),
+      inset 1px 1px 1px rgb(255 255 255 / 0.24);
+  }
+  /* Night: neutral halo off a deep black so the pill floats off the dark floor. */
+  .dark .glass-quiet {
+    box-shadow:
+      0 10px 28px -8px rgb(0 0 0 / 0.62),
+      0 3px 12px -6px rgb(0 0 0 / 0.5),
+      var(--shadow-raised),
+      inset 0 1px 0 rgb(255 255 255 / 0.1),
+      inset 1px 1px 1px rgb(255 255 255 / 0.07);
+  }
+  .dark .glass-quiet:hover {
+    box-shadow:
+      0 14px 36px -8px rgb(0 0 0 / 0.74),
+      0 4px 14px -6px rgb(0 0 0 / 0.56),
+      var(--shadow-float),
+      inset 0 1px 0 rgb(255 255 255 / 0.14),
+      inset 1px 1px 1px rgb(255 255 255 / 0.09);
+  }
+
+  /* A gentle morph timing helper kept for the page popovers that opt into it. */
+  .glass-morph {
+    transition:
+      opacity 220ms var(--ease-out-quint),
+      transform 260ms var(--ease-out-quint);
+  }
+
+  /* ===== Tactile feedback (iOS HIG) =====
+     A pressable surface: it scales DOWN a hair (0.975) on active, snaps back on
+     release via the press spring. No bounce/elastic — a real object you push on
+     doesn't overshoot, it just returns. Apply to any click target that should
+     read as a physical button; pair with a hover lift where the surface has
+     depth (the glass pills already carry their own hover, so they opt out).
+
+     `.tactile` is the universal press affordance. `.tactile-soft` is a lighter
+     0.985 for chrome controls (the close X, tab links) where 0.975 would feel
+     heavy-handed. Both use the same spring and respect reduced-motion. */
+  .tactile {
+    transition:
+      transform var(--spring-press-dur) var(--spring-press),
+      background-color 150ms var(--ease-out-quint),
+      border-color 150ms var(--ease-out-quint),
+      color 150ms var(--ease-out-quint),
+      box-shadow var(--spring-press-dur) var(--spring-press);
+  }
+  .tactile:active {
+    transform: scale(0.975);
+  }
+
+  .tactile-soft {
+    transition:
+      transform var(--spring-press-dur) var(--spring-press),
+      background-color 150ms var(--ease-out-quint),
+      border-color 150ms var(--ease-out-quint),
+      color 150ms var(--ease-out-quint);
+  }
+  .tactile-soft:active {
+    transform: scale(0.985);
+  }
+
+  /* Press-and-hold "deeper" affordance for the biggest actions — the primary
+     CTA. Held down, the surface settles a touch further and the shadow tightens,
+     so a held press reads as "loaded". */
+  .tactile-deep {
+    transition:
+      transform var(--spring-press-dur) var(--spring-press),
+      box-shadow var(--spring-press-dur) var(--spring-press),
+      background-color 150ms var(--ease-out-quint);
+  }
+  .tactile-deep:active {
+    transform: scale(0.97);
+  }
+
+  /* ===== Momentum scroll (iOS HIG) =====
+     The zero-cost baseline: contain overscroll so the page never scrolls out
+     from under a list, and add -webkit-overflow-scrolling so iOS keeps momentum
+     after the finger lifts. The full rubber-band resistance is layered on by
+     useElasticScroll() where the gesture is touch. */
+  .ios-scroll {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* ===== Graceful degradation =====
+     Without backdrop-filter support, or when the user asks for reduced
+     transparency, the glass falls back to an opaque floating surface so nothing
+     becomes unreadable. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-surface::before,
+    .surface-glass::before,
+    .glass-card::before {
+      backdrop-filter: none;
+      filter: none;
+    }
+    .glass-surface::after,
+    .surface-glass::after,
+    .glass-card::after {
+      background-color: rgb(var(--glass-fill) / 1);
+    }
+    .glass-accent {
+      background-color: var(--c-brand);
+      backdrop-filter: none;
+    }
+    .glass-quiet {
+      background-color: var(--c-elevated);
+      backdrop-filter: none;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .glass-surface::before,
+    .surface-glass::before,
+    .glass-card::before {
+      backdrop-filter: none;
+      filter: none;
+    }
+    .glass-surface::after,
+    .surface-glass::after,
+    .glass-card::after {
+      background-color: rgb(var(--glass-fill) / 1);
+    }
+    .glass-accent {
+      background-color: var(--c-brand);
+      backdrop-filter: none;
+    }
+    .glass-quiet {
+      background-color: var(--c-elevated);
+      backdrop-filter: none;
+    }
+  }
+
   /* Verdict answer surface — a diagonal wash from the verdict tint (top, behind
      the large display verdict) down to the neutral surface (bottom, behind the
      dotted-leader rows so muted labels keep their contrast), plus a soft shadow
@@ -308,15 +740,37 @@
 
   /* Report sections fade up as they arrive; visible by default if motion is off */
   .report-enter {
-    animation: rise-in 360ms var(--ease-out-quint) both;
+    animation: rise-in var(--spring-reveal-dur) var(--spring-reveal) both;
+  }
+
+  /* The verdict answer — the BUY/HOLD/AVOID card the user waited through an
+     analysis for. It rises + settles from a slight scale (the "iOS sheet"
+     read) just after the report header's report-enter settles (80ms lag), so
+     the answer arrives as a deliberate reveal rather than an instant render.
+     This is a state transition (loading → answer), not decoration; it replays
+     only when the card actually mounts (a new analysis), never on re-render. */
+  .verdict-reveal {
+    animation: verdict-settle var(--spring-modal-dur) var(--spring-modal) both;
+    animation-delay: 80ms;
+  }
+
+  @keyframes verdict-settle {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   .checkmark-pop {
-    animation: checkmark-pop 240ms var(--ease-out-quint) both;
+    animation: checkmark-pop var(--spring-press-dur) var(--spring-press) both;
   }
 
   .month-enter {
-    animation: month-slide-in 180ms var(--ease-out-quint) both;
+    animation: month-slide-in var(--spring-popover-dur) var(--spring-popover) both;
   }
 
   .skeleton {
@@ -330,9 +784,9 @@
     opacity: 0;
     margin-top: 0;
     transition:
-      grid-template-rows 300ms var(--ease-out-quint),
-      opacity 220ms ease,
-      margin-top 300ms var(--ease-out-quint);
+      grid-template-rows var(--spring-modal-dur) var(--spring-modal),
+      opacity var(--spring-press-dur) var(--spring-press),
+      margin-top var(--spring-modal-dur) var(--spring-modal);
   }
 
   .details-collapse > div {
@@ -344,6 +798,13 @@
     grid-template-rows: 1fr;
     opacity: 1;
     margin-top: 1.5rem;
+  }
+
+  /* Modifier for an expansion that sits flush under its trigger row (the
+     candidate-list broker summary), where the 1.5rem section gap the report
+     uses would push the panel away from its row. Pairs with .details-collapse. */
+  .details-collapse-tight.details-collapse-open {
+    margin-top: 0;
   }
 
   .jauhi-scan {
@@ -441,10 +902,11 @@
   }
 }
 
-/* Stepped flow: each stage rises in as it becomes active */
-.stage-enter {
-  animation: stage-rise 360ms var(--ease-out-quint) both;
-}
+  /* Stepped flow: each stage rises in as it becomes active — spring-reveal so
+     the stage swap reads as a content layer settling into place. */
+  .stage-enter {
+    animation: stage-rise var(--spring-reveal-dur) var(--spring-reveal) both;
+  }
 
 @keyframes stage-rise {
   from {
@@ -488,6 +950,9 @@
   .report-enter {
     animation: none;
   }
+  .verdict-reveal {
+    animation: none;
+  }
   .route-panel {
     animation: none;
   }
@@ -529,6 +994,22 @@
   .modal-leave,
   .modal-leave-backdrop {
     animation: none !important;
+  }
+  /* Neutralize the tactile press + spring transitions — state changes must
+     still resolve, just instantly. And kill smooth scroll so the wheel/keys
+     jump rather than glide for motion-sensitive users. */
+  .tactile,
+  .tactile-soft,
+  .tactile-deep {
+    transition: background-color 0.01ms, border-color 0.01ms, color 0.01ms;
+  }
+  .tactile:active,
+  .tactile-soft:active,
+  .tactile-deep:active {
+    transform: none;
+  }
+  .ios-scroll {
+    scroll-behavior: auto;
   }
   * {
     transition-duration: 0.01ms !important;

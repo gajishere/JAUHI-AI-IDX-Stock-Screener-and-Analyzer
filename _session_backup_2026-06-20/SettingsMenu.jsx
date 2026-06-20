@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { useTheme } from '../lib/theme';
+import { useGlassSpecular } from '../lib/useGlassSpecular';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import { useSpringPresence } from '../lib/useSpringPresence';
-import { presets } from '../lib/motion';
 
 function GearIcon() {
   return (
@@ -44,6 +43,8 @@ export function SettingsMenu() {
   const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  // Drives the pointer-tracked specular highlight on the glass popover.
+  const glassRef = useGlassSpecular();
 
   useEffect(() => {
     if (!open) return;
@@ -63,13 +64,6 @@ export function SettingsMenu() {
     };
   }, [open]);
 
-  // Interruptible popover presence: the panel scales+fades from its top-right
-  // origin (the gear). Reopening mid-close cancels the close cleanly.
-  const { mounted, nodeRef } = useSpringPresence(open, presets.popoverEnter, presets.popoverExit);
-
-  // The sliding segmented-indicator offset, computed once so the JSX stays parser-clean.
-  const indicatorOffset = theme === 'dark' ? '100%' : '0';
-
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -79,43 +73,30 @@ export function SettingsMenu() {
         aria-expanded={open}
         aria-label={t('Settings', 'Pengaturan')}
         title={t('Settings', 'Pengaturan')}
-        className={`tactile-soft inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-paper text-ink-muted shadow-sm shadow-ink/5 hover:text-ink sm:min-h-9 sm:min-w-9 ${
+        className={`glass-trigger spring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line text-ink-muted transition-[transform,color] duration-200 hover:scale-[1.04] hover:text-ink active:scale-[0.95] sm:min-h-9 sm:min-w-9 ${
           open ? 'text-ink' : ''
         }`}
       >
         <GearIcon />
       </button>
 
-      {mounted && (
+      {open && (
         <div
-          ref={nodeRef}
+          ref={glassRef}
           role="dialog"
           aria-label={t('Settings', 'Pengaturan')}
-          className="glass-surface absolute right-0 top-[calc(100%+0.5rem)] z-dropdown w-64 max-w-[calc(100vw-1.5rem)] rounded-xl p-4"
           style={{ transformOrigin: 'top right' }}
+          className="surface-glass glass-morph absolute right-0 top-[calc(100%+0.5rem)] z-dropdown w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-line p-4"
         >
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Appearance', 'Tampilan')}
             </p>
-            {/* iOS segmented control: one shared track, the active segment carried by a
-                sliding pill that springs between slots via --spring-settle. The pill is
-                absolutely positioned and translated by index, so it GLIDES instead of
-                cross-fading — the signature native segmented-control motion. */}
             <div
               role="group"
               aria-label={t('Theme', 'Tema')}
-              className="relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1"
+              className="inline-flex w-full items-center gap-1 rounded-full border border-line/70 bg-well/40 p-1 backdrop-blur-sm"
             >
-              <span
-                aria-hidden="true"
-                className="absolute top-1 bottom-1 left-1 rounded-full bg-brand shadow-sm shadow-brand/25"
-                style={{
-                  width: 'calc(50% - 4px)',
-                  transform: 'translateX(' + indicatorOffset + ')',
-                  transition: 'transform var(--spring-settle-dur) var(--spring-settle)',
-                }}
-              />
               {THEMES.map(({ value, labelEn, labelId, Icon }) => {
                 const active = theme === value;
                 return (
@@ -124,8 +105,8 @@ export function SettingsMenu() {
                     type="button"
                     onClick={() => setTheme(value)}
                     aria-pressed={active}
-                    className={`tactile-soft relative z-[1] inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
-                      active ? 'text-on-brand' : 'text-ink-muted hover:text-ink'
+                        className={`spring inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium transition-[transform,color,background-color] duration-200 hover:scale-[1.02] active:scale-[0.95] sm:min-h-9 ${
+                      active ? 'bg-brand text-on-brand shadow-sm shadow-brand/25' : 'text-ink-muted hover:text-ink'
                     }`}
                   >
                     <Icon />
