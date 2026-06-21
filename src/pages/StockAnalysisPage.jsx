@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   BrokerScreenshotField,
   FieldLabel,
@@ -26,6 +27,7 @@ import { newsService } from '../lib/news';
 import { useLang, useT } from '../lib/i18n';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
+import { wibNow } from '../lib/marketHours';
 
 // Signed percentage moves color by direction, not by assumption
 function moveTone(ratio) {
@@ -207,6 +209,7 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
 export default function StockAnalysisPage() {
   const t = useT();
   const { lang } = useLang();
+  const location = useLocation();
 
   const TIMEFRAMES = [
     {
@@ -406,9 +409,11 @@ export default function StockAnalysisPage() {
     setBrokerScreenshots((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const runAnalysis = async () => {
-    const code = ticker.trim().toUpperCase();
-    if (!code || !date || loading) return;
+  const runAnalysis = async (overrides = {}) => {
+    const code = (overrides.ticker ?? ticker).trim().toUpperCase();
+    const asOfDate = overrides.date ?? date;
+    const runIntent = overrides.intent ?? intent;
+    if (!code || !asOfDate || loading) return;
     setUploadOpen(false);
     setLoading(true);
     setShowFullReport(false);
@@ -436,8 +441,8 @@ export default function StockAnalysisPage() {
           // session separately (rather than trusting an undocumented ranged
           // call) keeps the W-1 label truthful. A failure degrades gracefully:
           // the score falls back to the technical/volume-only flow read.
-          const asOfCandles = chart.candles.filter((c) => c.date <= date);
-          const asOfSession = asOfCandles[asOfCandles.length - 1]?.date ?? date;
+          const asOfCandles = chart.candles.filter((c) => c.date <= asOfDate);
+          const asOfSession = asOfCandles[asOfCandles.length - 1]?.date ?? asOfDate;
           const tradingSessions = asOfCandles.map((c) => c.date);
           try {
             return await fetchBandarmologyRange(code, {
@@ -450,7 +455,7 @@ export default function StockAnalysisPage() {
             throw err;
           }
         })(),
-        newsService.fetchNewsSentiment(code, emitenInfo?.name, date, newsWindow, lang),
+        newsService.fetchNewsSentiment(code, emitenInfo?.name, asOfDate, newsWindow, lang),
       ]);
 
       const fundamentals = fundRes.status === 'fulfilled' ? fundRes.value : null;
@@ -470,7 +475,7 @@ export default function StockAnalysisPage() {
 
       const analysisData = buildAnalysisReport({
         code,
-        requestedDate: date,
+        requestedDate: asOfDate,
         chart,
         fundamentals,
         emitenInfo,
@@ -483,7 +488,7 @@ export default function StockAnalysisPage() {
       // For the holder path, precompute unrealized P&L from the as-of close so
       // the AI reasons over the real position, not its own arithmetic.
       const aiIntent =
-        intent === 'hold'
+        runIntent === 'hold'
           ? (() => {
               const ep = Number(entryPrice);
               const qty = Number(quantity) || 0;
@@ -496,7 +501,7 @@ export default function StockAnalysisPage() {
                 pnl: ep ? { pct, amount: (close - ep) * qty, isProfit: close >= ep } : null,
               };
             })()
-          : intent === 'buy'
+          : runIntent === 'buy'
             ? { mode: 'buy' }
             : null;
 
@@ -538,6 +543,44 @@ export default function StockAnalysisPage() {
     setNews(null);
     setNewsError(null);
   };
+
+  // Deep-link from the Live Screening "Full analysis →" button.
+  // URL: /analysis?ticker=XXXX&intent=hold&autorun=1
+  // The component is always mounted (hidden-panel routing), so we watch
+  // location.search to detect when the user navigates here from screening.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const autoTicker = params.get('ticker');
+    if (!autoTicker || params.get('autorun') !== '1') return;
+    if (loading) return; // don't interrupt an in-progress run
+
+    const normalizedTicker = autoTicker.toUpperCase();
+    const wibDate = wibNow().dateStr; // today's WIB trading date
+    const autoIntent = params.get('intent') || 'hold';
+
+    // Defer state + analysis kick past the current render (same pattern as
+    // AutoScreeningPage's load kick) to avoid set-state-in-effect lint errors
+    // and to ensure React has committed before we fire the analysis.
+    const id = setTimeout(() => {
+      setTicker(normalizedTicker);
+      setDate(wibDate);
+      setIntent(autoIntent);
+      setStage(autoIntent);
+      setIntentOpen(false);
+      setSuggestedTickers([]);
+      setError(null);
+      setAnalysis(null);
+      setAIAnalysis(null);
+      setBandar(null);
+      setNews(null);
+      setNewsError(null);
+      setBrokerScreenshots([]);
+      // Pass values as overrides so runAnalysis doesn't read the stale
+      // pre-setTimeout closure values for ticker / date / intent.
+      runAnalysis({ ticker: normalizedTicker, date: wibDate, intent: autoIntent });
+    }, 0);
+    return () => clearTimeout(id);
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sentimentTone =
     analysis?.sentiment === 'Bullish' ? 'pos' : analysis?.sentiment === 'Bearish' ? 'neg' : 'warn';

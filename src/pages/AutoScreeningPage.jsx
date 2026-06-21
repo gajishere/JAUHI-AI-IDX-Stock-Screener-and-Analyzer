@@ -152,7 +152,7 @@ function CandidateCard({ c, rank, index }) {
   const liveUp = c.live?.changePct != null && c.live.changePct > 0;
   const liveDown = c.live?.changePct != null && c.live.changePct < 0;
   const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
-  const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}`;
+  const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=hold&autorun=1`;
 
   return (
     <article
