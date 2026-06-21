@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { useTheme } from '../lib/theme';
+import { useSound } from '../lib/sound';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
@@ -31,6 +32,14 @@ function MoonIcon() {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
 const THEMES = [
   { value: 'light', labelEn: 'Light', labelId: 'Terang', Icon: SunIcon },
   { value: 'dark', labelEn: 'Dark', labelId: 'Gelap', Icon: MoonIcon },
@@ -42,6 +51,7 @@ const THEMES = [
 export function SettingsMenu() {
   const t = useT();
   const { theme, setTheme } = useTheme();
+  const { soundEnabled, setSoundEnabled, playDing } = useSound();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -69,6 +79,7 @@ export function SettingsMenu() {
 
   // The sliding segmented-indicator offset, computed once so the JSX stays parser-clean.
   const indicatorOffset = theme === 'dark' ? '100%' : '0';
+  const soundOffset = soundEnabled ? '100%' : '0';
 
   return (
     <div ref={rootRef} className="relative">
@@ -134,6 +145,59 @@ export function SettingsMenu() {
                 );
               })}
             </div>
+          </div>
+
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              {t('Sound', 'Suara')}
+            </p>
+            {/* Same iOS segmented-control vocabulary as the theme toggle. Turning
+                sound on plays a sample ding immediately — it's both the feedback
+                ("this is the chime you'll hear") and the user gesture that
+                unlocks the AudioContext for all later triggers. */}
+            <div
+              role="group"
+              aria-label={t('Completion chime', 'Lonceng selesai')}
+              className="relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute top-1 bottom-1 left-1 rounded-full bg-brand shadow-sm shadow-brand/25"
+                style={{
+                  width: 'calc(50% - 4px)',
+                  transform: 'translateX(' + soundOffset + ')',
+                  transition: 'transform var(--spring-settle-dur) var(--spring-settle)',
+                }}
+              />
+              {[
+                { value: false, labelEn: 'Off', labelId: 'Mati', Icon: null },
+                { value: true, labelEn: 'On', labelId: 'Aktif', Icon: BellIcon },
+              ].map(({ value, labelEn, labelId, Icon }) => {
+                const active = soundEnabled === value;
+                return (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    onClick={() => {
+                      setSoundEnabled(value);
+                      // Play the chime when enabling so the gesture unlocks audio
+                      // and the trader hears exactly what each completion will sound like.
+                      if (value) playDing();
+                    }}
+                    aria-pressed={active}
+                    className={`tactile-soft relative z-[1] inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
+                      active ? 'text-on-brand' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    {Icon && <Icon />}
+                    {t(labelEn, labelId)}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+              {t('Chimes when a scan, analysis, or re-rank finishes.', 'Berbunyi saat pemindaian, analisis, atau pemeringkatan ulang selesai.')}
+            </p>
           </div>
 
           <div className="mt-4 border-t border-line pt-4">

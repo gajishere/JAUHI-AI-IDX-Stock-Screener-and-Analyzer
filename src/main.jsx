@@ -5,14 +5,17 @@ import App from './App.jsx'
 import { BrowserRouter } from 'react-router-dom'
 import { LanguageProvider } from './lib/i18n'
 import { ThemeProvider } from './lib/theme'
+import { SoundProvider } from './lib/sound'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider>
       <LanguageProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <SoundProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </SoundProvider>
       </LanguageProvider>
     </ThemeProvider>
   </StrictMode>,

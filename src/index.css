@@ -462,6 +462,83 @@
     background-color: rgb(var(--glass-fill) / 0.56);
   }
 
+  /* Focus rings the CARD, not the inner link. The whole tile is one navigable
+     unit (its <article> wraps a single <Link>), so keyboard focus should read
+     as "this row is selected" — a ring on the inner Link's box would look like a
+     partial selection hugging the content, with a sharp 2px radius against the
+     card's 16px glass edge. :focus-within lets the ring follow the card's
+     rounded shape from any focusable child, in the ink hue (brand-green would
+     vanish into the green hover rim) so it clears AA on glass in both themes. */
+  .glass-card:focus-within {
+    outline: 2px solid var(--c-ink);
+    outline-offset: 3px;
+  }
+  .dark .glass-card:focus-within {
+    outline-color: #eef1f4;
+  }
+
+  /* Pointer-context adaptation. Hover is a fine-pointer affordance: on touch it
+     either never fires or sticks after tap (the infamous mobile "stuck hover"),
+     so the green-rim/float lift and the -translate-y-px hover utilities are gated
+     to devices that can actually hover. Coarse pointers get a press-down
+     feedback instead (the same physical vocabulary as `.tactile`), so a tapped
+     candidate tile still responds. */
+  @media (hover: hover) {
+    .glass-card.glass-lift:hover {
+      transform: translateY(-1px);
+    }
+  }
+  @media (hover: none) {
+    .glass-card.glass-lift:active {
+      transform: scale(0.985);
+      transition-duration: var(--spring-press-dur);
+      transition-timing-function: var(--spring-press);
+    }
+    /* Lighten the high-frequency list tile's frost on coarse pointers — 5 glass
+       cards scrolling at once is the heaviest glass payload, and cheap Androids
+       (the trader context) jank on 16px blur + the displacement filter. The
+       one-at-a-time chrome (modals, popover, verdict) keeps full fidelity. */
+    .glass-card::before {
+      backdrop-filter: blur(9px) saturate(160%);
+      -webkit-backdrop-filter: blur(9px) saturate(160%);
+    }
+  }
+
+  /* Verdict glass — the BUY/HOLD/SELL answer card as a frosted, lightly
+     refractive liquid-glass slab (product override of the Glass-On-Chrome-Only
+     rule, mirroring the Live Screening candidate tiles). It pairs `.glass-card`'s
+     refraction `::before` + tint `::after` stack with the verdict color:
+       — `::before` is inherited from `.glass-card` (the shared blur + url(#glass-
+         distortion) lens over whatever sits behind the card on the page).
+       — `::after` is overridden here to a verdict-tinted diagonal wash: more
+         saturated at the top behind the large display verdict (so color still
+         carries the call, per the Verdict Rule) and more opaque toward the body
+         where the dotted-leader Rows live (so muted labels keep WCAG AA — the
+         exact contract the flat .verdict-* gradient was designed for, preserved).
+       — border + outer glow are tinted with the verdict hue (the verdict carries
+         meaning at the rim too, not just in the fill).
+     Compose with the matching `.verdict-pos/warn/neg` class so the verdict color
+     and the flat-gradient fallback still apply; this layer only swaps the fill
+     for glass. Falls back to opaque identically to `.glass-card`. */
+  .glass-verdict::after {
+    background-image: linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--verdict-glow) 70%, rgb(var(--glass-fill))) 0%,
+      rgb(var(--glass-fill) / 0.86) 52%,
+      rgb(var(--glass-fill) / 0.96) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 2px 2px 1px rgb(255 255 255 / 0.55),
+      inset -1px -1px 1px rgb(255 255 255 / 0.22);
+  }
+  .glass-verdict {
+    border-color: color-mix(in srgb, var(--verdict-glow) 80%, var(--c-line));
+    box-shadow:
+      var(--edge-highlight),
+      0 12px 34px -14px color-mix(in srgb, var(--verdict-glow) 100%, transparent);
+  }
+
   /* A subtly brand-tinted, recessed tray for an INLINE glass surface that has
      no dark scrim behind it (the analysis-step calendar). Liquid glass refracts
      whatever sits behind it, so over the blank near-white page the frost has
@@ -675,14 +752,17 @@
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass-surface::before,
     .surface-glass::before,
-    .glass-card::before {
+    .glass-card::before,
+    .glass-verdict::before {
       backdrop-filter: none;
       filter: none;
     }
     .glass-surface::after,
     .surface-glass::after,
-    .glass-card::after {
+    .glass-card::after,
+    .glass-verdict::after {
       background-color: rgb(var(--glass-fill) / 1);
+      background-image: none;
     }
     .glass-accent {
       background-color: var(--c-brand);
@@ -697,14 +777,17 @@
   @media (prefers-reduced-transparency: reduce) {
     .glass-surface::before,
     .surface-glass::before,
-    .glass-card::before {
+    .glass-card::before,
+    .glass-verdict::before {
       backdrop-filter: none;
       filter: none;
     }
     .glass-surface::after,
     .surface-glass::after,
-    .glass-card::after {
+    .glass-card::after,
+    .glass-verdict::after {
       background-color: rgb(var(--glass-fill) / 1);
+      background-image: none;
     }
     .glass-accent {
       background-color: var(--c-brand);

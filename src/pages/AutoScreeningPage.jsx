@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../lib/i18n';
+import { useSound } from '../lib/sound';
 import { Pill, RatingFigure } from '../components/report';
 import { formatPct } from '../lib/analysis';
 import { marketStatus, nextScanSlot, wibNow } from '../lib/marketHours';
@@ -75,7 +76,7 @@ function StatusBar({ snapshot }) {
     phase.tone === 'pos' ? 'bg-pos' : phase.tone === 'warn' ? 'bg-warn' : 'bg-ink-muted/60';
 
   return (
-    <div className="surface-raised rounded-2xl border border-line p-5 sm:p-6">
+    <div className="glass-surface rounded-2xl p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
         {/* phase — the lead readout */}
         <div className="flex items-center gap-3">
@@ -93,20 +94,26 @@ function StatusBar({ snapshot }) {
           </div>
         </div>
 
-        {/* WIB clock — supporting readout */}
-        <div className="ml-auto text-right sm:ml-0">
-          <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Jakarta time', 'Waktu Jakarta')}</p>
-          <p className="font-mono text-lg tabular-nums">
-            {wib.hm} <span className="text-xs text-ink-muted">WIB</span>
-          </p>
-        </div>
+        {/* supporting readouts — clock + next-scan. Grouped so they wrap as a
+            unit: on a phone they stack under the phase (never stranding the
+            countdown alone); from sm: up they sit beside the phase, divided by
+            the dotted leader. */}
+        <div className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:gap-8">
+          {/* WIB clock */}
+          <div className="text-right sm:text-left">
+            <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Jakarta time', 'Waktu Jakarta')}</p>
+            <p className="font-mono text-lg tabular-nums">
+              {wib.hm} <span className="text-xs text-ink-muted">WIB</span>
+            </p>
+          </div>
 
-        {/* next scan countdown — supporting readout, separated by a dotted leader */}
-        <div className="relative text-right before:absolute before:-left-6 before:top-1/2 before:hidden before:h-5 before:w-px before:-translate-y-1/2 before:bg-line sm:before:block">
-          <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Next scan', 'Pemindaian berikutnya')}</p>
-          <p className="font-mono text-lg tabular-nums">
-            {next.slot} <span className="text-xs text-ink-muted">· {fmtCountdown(next.minutesUntil)}</span>
-          </p>
+          {/* next scan countdown — separated by a dotted leader from sm: up */}
+          <div className="relative text-right before:absolute before:-left-4 before:top-1/2 before:hidden before:h-5 before:w-px before:-translate-y-1/2 before:bg-line sm:before:block">
+            <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Next scan', 'Pemindaian berikutnya')}</p>
+            <p className="font-mono text-lg tabular-nums">
+              {next.slot} <span className="text-xs text-ink-muted">· {fmtCountdown(next.minutesUntil)}</span>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -156,12 +163,12 @@ function CandidateCard({ c, rank, index }) {
 
   return (
     <article
-      className="result-row-enter surface-raised overflow-hidden rounded-2xl border border-line transition-[box-shadow,transform] duration-200 [transition-timing-function:var(--ease-out-quart)] hover:-translate-y-px hover:shadow-float motion-reduce:translate-y-0 motion-reduce:transition-none"
+      className="result-row-enter glass-card glass-lift overflow-hidden rounded-2xl motion-reduce:translate-y-0 motion-reduce:transition-none"
       style={{ '--i': Math.min(index, 9) }}
     >
-      <Link to={href} className="tactile-soft group flex">
+      <Link to={href} className="tactile-soft group flex outline-none focus-visible:outline-none">
         {/* rank rail */}
-        <div className="flex w-14 shrink-0 flex-col items-center justify-center border-r border-line bg-well/50 py-5 sm:w-16">
+        <div className="flex w-12 shrink-0 flex-col items-center justify-center border-r border-line bg-white/10 py-5 backdrop-blur-sm dark:bg-white/5 sm:w-16">
           <span className="font-serif text-2xl font-medium leading-none text-ink sm:text-3xl">{rank}</span>
         </div>
 
@@ -194,7 +201,7 @@ function CandidateCard({ c, rank, index }) {
 
           {/* live quote — the hero figure on a live screening surface */}
           <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="font-mono text-xl tabular-nums text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+            <span className="font-mono text-lg tabular-nums text-ink sm:text-xl">{formatRp(c.live?.last ?? c.close)}</span>
             {c.live?.changePct != null && (
               <span className={`font-mono text-sm tabular-nums ${changeTone}`}>
                 {signedPct(c.live.changePct)}
@@ -238,7 +245,7 @@ function StateNotice({ kind }) {
   const t = useT();
   const scanning = kind === 'scanning' || kind === 'no-snapshot';
   return (
-    <div className="surface-raised rounded-2xl border border-line px-6 py-12 text-center">
+    <div className="glass-surface rounded-2xl px-6 py-12 text-center">
       {scanning ? (
         <>
           <span className="jauhi-scan mx-auto mb-4" aria-hidden="true">
@@ -265,10 +272,15 @@ function StateNotice({ kind }) {
 
 export default function AutoScreeningPage() {
   const t = useT();
+  const { playDing } = useSound();
   const [snapshot, setSnapshot] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ready | scanning | empty | error
   const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef(null);
+  // The last scan timestamp we chimed for. The page polls every 60s + on focus,
+  // so without this guard the chime would fire on every poll of the same list.
+  // We only ding when a genuinely fresh scan lands (generatedAt changed).
+  const lastAnnouncedAt = useRef(null);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -284,6 +296,14 @@ export default function AutoScreeningPage() {
       } else if (Array.isArray(data?.candidates) && data.candidates.length > 0) {
         setSnapshot(data);
         setStatus('ready');
+        // Chime only on a genuinely new scan — not on a repeat poll of the same
+        // snapshot. The first ready result is announced too (lastAnnouncedAt
+        // starts null), so a manual Refresh that returns the current list still
+        // dings; subsequent polls of that same list stay silent.
+        if (data.generatedAt && data.generatedAt !== lastAnnouncedAt.current) {
+          lastAnnouncedAt.current = data.generatedAt;
+          playDing();
+        }
       } else {
         setSnapshot(data?.generatedAt ? data : null);
         setStatus('empty');
@@ -293,7 +313,7 @@ export default function AutoScreeningPage() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [playDing]);
 
   useEffect(() => {
     // Defer the first fetch a tick so we don't setState synchronously in the

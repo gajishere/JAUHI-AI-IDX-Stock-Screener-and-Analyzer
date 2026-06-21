@@ -22,6 +22,7 @@ import { conglomerateGroup } from '../data/conglomerates';
 import { fetchMacro, summarizeMacro } from '../lib/macro';
 import { claudeAIService } from '../lib/claudeAI';
 import { useLang, useT } from '../lib/i18n';
+import { useSound } from '../lib/sound';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
 
@@ -197,7 +198,7 @@ function WhyNotRecommended({ date, filters, results }) {
       </p>
 
       <div className="relative mt-4 max-w-md text-left">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted">
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
             <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
@@ -214,7 +215,7 @@ function WhyNotRecommended({ date, filters, results }) {
           aria-controls="screening-ticker-suggestions"
           aria-activedescendant={active >= 0 ? `screening-ticker-option-${active}` : undefined}
           aria-autocomplete="list"
-          className="w-full rounded-xl border border-line bg-paper py-2.5 pl-10 pr-4 font-mono text-sm text-ink shadow-sm shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="w-full rounded-full border border-line bg-paper py-2.5 pl-11 pr-5 font-mono text-sm text-ink shadow-sm shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
         {suggestionsMounted && suggestions.length > 0 && (
           <ul
@@ -299,11 +300,12 @@ function WhyNotRecommended({ date, filters, results }) {
 export default function StockScreeningPage() {
   const t = useT();
   const { lang } = useLang();
+  const { playDing } = useSound();
   // Stepper labels for screening flow
   const STEP_LABELS = [
-    t('Select Date', 'Pilih Tanggal'),
-    t('Run Screening', 'Jalankan Penyaringan'),
-    t('Refine with Brokers', 'Sempurnakan dengan Broker'),
+    t('Select date', 'Pilih tanggal'),
+    t('Run screening', 'Jalankan penyaringan'),
+    t('Refine with brokers', 'Sempurnakan dengan broker'),
   ];
 
   // Flow: idle → (date modal) → loading → results → (upload modal) → re-ranked results
@@ -473,6 +475,8 @@ export default function StockScreeningPage() {
         setLoading(false);
         setError(null);
         setStage('refine');
+        // Candidates have landed — chime.
+        playDing();
         generateFramework(stage1Result.candidates, date);
         return;
       }
@@ -524,6 +528,8 @@ export default function StockScreeningPage() {
 
         setScreenings(formattedResults);
         setLoading(false);
+        // Mid-day Stage-2 candidates have landed — chime.
+        playDing();
 
         // Store raw analysis for potential display
         // Note: In a full implementation, we might want to display this raw analysis
@@ -617,6 +623,8 @@ export default function StockScreeningPage() {
         setUploadOpen(false);
         setRerankSuccess(true);
         setTimeout(() => setRerankSuccess(false), 1500);
+        // Re-rank complete — chime.
+        playDing();
       } else {
         setError(t('Failed to get screening results from AI analysis.', 'Gagal mendapatkan hasil penyaringan dari analisis AI.'));
       }
@@ -843,7 +851,7 @@ export default function StockScreeningPage() {
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
                 </svg>
-                {t('Run Screening', 'Jalankan Penyaringan')}
+                {t('Run screening', 'Jalankan penyaringan')}
               </LiquidGlass>
 
               {/* Filters sit below the CTA, behind one button, so the hero stays
@@ -855,7 +863,7 @@ export default function StockScreeningPage() {
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
                   aria-expanded={filtersOpen}
-                  className="tactile-soft surface-raised inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-paper px-4 text-sm font-medium text-ink-muted hover:border-ink-muted/50 hover:text-ink hover:-translate-y-px"
+                  className="glass-quiet tactile-soft inline-flex min-h-11 items-center gap-2 px-5 py-2.5 text-sm font-medium text-ink-muted hover:-translate-y-px hover:text-ink active:translate-y-0"
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M6 12h12M10 19h4" />
@@ -1199,7 +1207,7 @@ export default function StockScreeningPage() {
               <div>
                 <p className="font-mono text-xs text-ink-muted">
                   {t('Ranked', 'Diperingkat')} {asOfDate ? t(`· as of ${asOfDate}`, `· per ${asOfDate}`) : ''} ·{' '}
-                  {analysisMode === 'midday' ? t('midday', 'tengah hari') : t('EOD close', 'tutup EOD')}
+                  {analysisMode === 'midday' ? t('Midday', 'Tengah hari') : t('EOD close', 'Tutup EOD')}
                   {aiUsed && t(' · AI-enhanced', ' · ditingkatkan AI')}
                 </p>
                 <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">

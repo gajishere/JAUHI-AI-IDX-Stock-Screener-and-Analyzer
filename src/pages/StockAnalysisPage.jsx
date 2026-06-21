@@ -28,6 +28,7 @@ import { useLang, useT } from '../lib/i18n';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
 import { wibNow } from '../lib/marketHours';
+import { useSound } from '../lib/sound';
 
 // Signed percentage moves color by direction, not by assumption
 function moveTone(ratio) {
@@ -73,14 +74,14 @@ const VERDICT_WORD = {
 };
 
 // Tone-keyed styling for the verdict card so colors stay static (Tailwind can't
-// see runtime-built class names). The card surface IS the verdict tint — color
-// carries meaning, matching the system's "color is a verdict" rule — kept flat
-// (a hairline border, no shadow stack) per the elevation conventions.
-// The verdict surface is a diagonal gradient (defined in index.css as
-// .verdict-*): the verdict tint at the top behind the large display word, fading
-// to the neutral surface at the bottom behind the dotted-leader rows — so the
-// muted Row labels keep WCAG AA contrast while the card still reads as a lit,
-// colored, dimensional panel. A verdict-hued soft shadow lifts it off the page.
+// see runtime-built class names). The card is a liquid-glass slab (`.glass-card`
+// + `.glass-verdict` in index.css): the verdict tint shows through the
+// translucent fill and rims the card, so color still carries the call — the
+// Verdict Rule holds even under glass. The `.verdict-*` class still supplies the
+// flat-gradient fallback for browsers without backdrop-filter, and tints the
+// glass `::after` wash with the verdict hue (more saturated at the top behind the
+// large display word, more opaque toward the body where the dotted-leader Rows
+// live, so muted labels keep WCAG AA — the contract the gradient was built for).
 const VERDICT_TONE_STYLE = {
   pos: { word: 'text-pos', card: 'verdict-pos border-pos/30', dot: 'bg-pos' },
   warn: { word: 'text-warn', card: 'verdict-warn border-warn/40', dot: 'bg-warn' },
@@ -133,20 +134,20 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
   const guidance = (ai?.priceGuidance || '').trim();
 
   return (
-    <div className={`verdict-reveal rounded-2xl border p-6 sm:p-7 ${style.card}`}>
+    <div className={`glass-card glass-verdict verdict-reveal rounded-2xl p-6 sm:p-7 ${style.card}`}>
       {/* Kicker sits on the strongest part of the verdict gradient, where the
           muted token drops below AA — use a 70% ink so it clears 4.5:1 on the
           full tint in both themes without going full-weight. */}
       <p className="font-serif text-lg font-medium">{question}</p>
 
-      <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div className="mt-4 flex flex-col items-start gap-x-3 gap-y-1 sm:flex-row sm:items-baseline">
         <span className={`font-serif text-4xl font-medium tracking-tight sm:text-5xl ${style.word}`}>{word}</span>
         <span className="text-sm text-ink">{headline}</span>
       </div>
 
       {/* Holder position — live unrealized P&L from the as-of close. */}
       {intent === 'hold' && positionPnl && (
-        <div className="mt-5 grid gap-x-10 sm:grid-cols-2">
+        <div className="mt-5 grid gap-x-10 gap-y-0 sm:grid-cols-2">
           <Row label={t('Average entry', 'Entri rata-rata')} value={formatRp(positionPnl.entryPrice)} />
           <Row label={t('Current price', 'Harga saat ini')} value={formatRp(close)} />
           <Row label={t('Unrealized P&L', 'P&L belum terealisasi')} value={formatPct(positionPnl.pct)} tone={pnlTone} />
@@ -159,7 +160,7 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
       )}
 
       {/* Concrete price levels to act on. */}
-      <div className="mt-4 grid gap-x-10 border-t border-line/70 pt-4 sm:grid-cols-2">
+      <div className="mt-4 grid gap-x-10 gap-y-0 border-t border-line/70 pt-4 sm:grid-cols-2">
         {intent === 'buy' ? (
           <>
             <Row label={t('Ideal entry', 'Entri ideal')} value={kl.idealEntry} />
@@ -207,6 +208,7 @@ export default function StockAnalysisPage() {
   const t = useT();
   const { lang } = useLang();
   const location = useLocation();
+  const { playDing } = useSound();
 
   const TIMEFRAMES = [
     {
@@ -234,7 +236,7 @@ export default function StockAnalysisPage() {
       ),
     },
   ];
-  const STEP_LABELS = [t('Select Stock', 'Pilih Saham'), t('Select Date', 'Pilih Tanggal'), t('Your goal', 'Tujuan Anda')];
+  const STEP_LABELS = [t('Select stock', 'Pilih saham'), t('Select date', 'Pilih tanggal'), t('Your goal', 'Tujuan Anda')];
 
   // News lookback window the user picks on the date step (1 / 3 / 6 months).
   // The chosen range is passed to the news service; the classified sentiment
@@ -513,6 +515,10 @@ export default function StockAnalysisPage() {
       }
 
       setStage('report');
+      // The report the user waited through the analysis for has landed — chime.
+      // Fires whether the AI enrichment succeeded or degraded; the report is
+      // done either way, which is what the trader was waiting on.
+      playDing();
     } catch (err) {
       setError(err.message || t('Something went wrong fetching market data.', 'Terjadi kesalahan saat mengambil data pasar.'));
     } finally {
@@ -605,7 +611,7 @@ export default function StockAnalysisPage() {
               </p>
 
               <div className="relative mt-7 text-left sm:mt-9">
-                <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-ink-muted">
+                <span className="pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-ink-muted">
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="11" cy="11" r="7" />
                     <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
@@ -625,7 +631,7 @@ export default function StockAnalysisPage() {
                     activeSuggestion >= 0 ? `ticker-option-${activeSuggestion}` : undefined
                   }
                   aria-autocomplete="list"
-                  className="w-full rounded-2xl border border-line bg-paper py-4 pl-14 pr-5 font-mono text-lg text-ink shadow-lg shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
+                  className="w-full rounded-full border border-line bg-paper py-4 pl-16 pr-6 font-mono text-lg text-ink shadow-lg shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
                 />
                 {suggestionsMounted && suggestedTickers.length > 0 && (
                   <ul
@@ -993,7 +999,7 @@ export default function StockAnalysisPage() {
                 <div className="flex items-baseline gap-3">
                   <RatingFigure rating={analysis.overallRatings.shortTerm.rating} className="text-6xl" />
                   <div className="text-left">
-                    <p className="mt-0 text-xs text-ink-muted font-medium">{t('Short-term', 'Jangka pendek')}</p>
+                    <p className="mt-0 text-xs text-ink-muted font-medium">{t('Short term', 'Jangka pendek')}</p>
                     <p className="mt-0 text-xs text-ink">{t('Rating', 'Peringkat')}</p>
                   </div>
                 </div>
