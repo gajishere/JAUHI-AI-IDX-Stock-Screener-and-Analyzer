@@ -73,12 +73,15 @@ function App() {
 
       <footer className="border-t border-line">
         <div className="mx-auto w-full max-w-4xl px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
-          <p className="text-xs text-ink-muted">
-            {t(
-              'Research notes are generated from live market data and are not investment advice.',
-              'Catatan riset dihasilkan dari data pasar real-time dan bukan merupakan nasihat investasi.',
-            )}
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-xs text-ink-muted">
+              {t(
+                'Research notes are generated from live market data and are not investment advice.',
+                'Catatan riset dihasilkan dari data pasar real-time dan bukan merupakan nasihat investasi.',
+              )}
+            </p>
+            <p className="text-xs text-ink-muted shrink-0">JAUHI AI Version 3.1</p>
+          </div>
         </div>
       </footer>
     </div>
