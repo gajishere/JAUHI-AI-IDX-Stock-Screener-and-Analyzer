@@ -5,9 +5,10 @@
 // bursting (e.g. a full-universe screen) would otherwise be rejected. These
 // surfaces are display-only context; they never feed the locked analysis score.
 
-import { finishIdxActivity, setIdxConfigured, startIdxActivity } from './idxSession';
+import { finishIdxActivity, setIdxConfigured, startIdxActivity } from './idxSession.js';
+import { IDX_BASE } from './apiBase.js';
 
-const BASE = '/idx';
+const BASE = IDX_BASE; // '/idx' in the browser; absolute origin + /idx in Node
 const MIN_INTERVAL_MS = 1200; // stay under the BASIC 1 req/s ceiling
 
 // Foreign vs local comes straight from the API's broker group, no name-matching.
@@ -110,6 +111,90 @@ export async function fetchTopBrokers({
     totalFreq,
     foreignShare: totalValue > 0 ? foreignValue / totalValue : null,
     topByValue,
+  };
+}
+
+const cleanNum = (v) => {
+  if (v == null) return null;
+  const n = Number(String(v).replace(/[+,]/g, '').trim());
+  return Number.isFinite(n) ? n : null;
+};
+
+// Live "market movers" seed for the auto-screener. Wraps the IDX trending
+// endpoint (`/api/main/trending`) — a zero-param, no-cache feed of the names
+// actually moving right now (most-active: strong gainers AND losers + liquid
+// blue chips). The auto-screen unions this with the Yahoo momentum shortlist so
+// the seed is genuinely intraday-fresh without a slow full-universe scan.
+//
+// Returns: [{ code, name, last, prevClose, change, changePct }] (gainers and
+// losers both included; the caller decides how to filter/rank). The exact
+// "top gainers / volume / value / net-foreign" movers endpoint exists upstream
+// but needs param confirmation in the RapidAPI playground; trending is the
+// confirmed-live seed we rely on.
+export async function fetchMarketMovers() {
+  const payload = await idxFetch('/api/main/trending');
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.list)
+      ? payload.list
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+  return list
+    .map((r) => ({
+      code: String(r.symbol || r.symbol_2 || '').trim().toUpperCase(),
+      name: r.name ?? null,
+      last: cleanNum(r.last ?? r.price),
+      prevClose: cleanNum(r.previous),
+      change: cleanNum(r.change),
+      changePct: cleanNum(r.percent ?? r.percentage),
+      tradeable: r.tradeable !== 0 && r.status !== 'STATUS_SUSPEND',
+    }))
+    .filter((r) => r.code);
+}
+
+// Live single-stock snapshot (`/api/emiten/{code}/info`) — the intraday price +
+// volume the daily Yahoo candle lags. Used as a finalist-only overlay (≤5 calls
+// per scan), so it stays inside the BASIC ~1 req/s budget. Memoized per code so
+// an accidental double-fetch in one scan dedupes; failures evict for retry.
+// (Each scan runs in a fresh serverless process, so there's no stale-data risk
+// across scans.)
+const infoCache = new Map();
+
+export function fetchStockInfo(code) {
+  const sym = String(code || '').trim().toUpperCase();
+  if (!sym) return Promise.reject(new Error('Stock info needs a ticker'));
+  const cached = infoCache.get(sym);
+  if (cached) return cached;
+  const pending = fetchStockInfoUncached(sym);
+  infoCache.set(sym, pending);
+  pending.catch(() => infoCache.delete(sym));
+  return pending;
+}
+
+async function fetchStockInfoUncached(sym) {
+  const d = await idxFetch(`/api/emiten/${encodeURIComponent(sym)}/info`);
+  if (!d || typeof d !== 'object') throw new Error(`No info for ${sym}`);
+  const bid = d.orderbook?.bid ?? {};
+  const offer = d.orderbook?.offer ?? {};
+  return {
+    live: true,
+    code: String(d.symbol || sym).toUpperCase(),
+    name: d.name ?? null,
+    last: cleanNum(d.price),
+    prevClose: cleanNum(d.previous),
+    change: cleanNum(d.change),
+    changePct: cleanNum(d.percentage),
+    volume: cleanNum(d.volume), // shares traded today
+    value: cleanNum(d.value), // Rp turnover today ('NA' before/at close → null)
+    sector: d.sector ?? null,
+    subSector: d.sub_sector ?? null,
+    status: d.status ?? null,
+    tradeable: d.tradeable !== 0,
+    marketHourStatus: d.market_hour?.status ?? null,
+    asOf: d.date ?? null,
+    bid: { price: cleanNum(bid.price), volume: cleanNum(bid.volume) },
+    offer: { price: cleanNum(offer.price), volume: cleanNum(offer.volume) },
   };
 }
 

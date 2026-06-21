@@ -13,8 +13,9 @@ import { emiten } from '../data/emiten.js';
 import { boardRisk, marketCap as calcMarketCap } from './universe.js';
 import { resilientFetch } from './marketData.js';
 import { capTiersBounds, shortlistSizeFor } from './screeningCategories.js';
+import { YF_BASE } from './apiBase.js';
 
-const YF = '/yf';
+const YF = YF_BASE; // '/yf' in the browser; absolute origin + /yf in Node
 const SPARK_CHUNK = 20; // Yahoo rejects spark requests with > 20 symbols
 const SCAN_CONCURRENCY = 5; // keep the proxy/Yahoo happy under burst load
 

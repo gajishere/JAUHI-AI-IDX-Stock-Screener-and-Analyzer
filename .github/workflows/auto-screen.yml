@@ -1,0 +1,51 @@
+name: IDX Auto-Screen
+
+# Fires the live auto-screener at each fixed WIB clock slot by POSTing the
+# token-protected Vercel run endpoint. The endpoint self-guards on the WIB
+# schedule, so cron drift (GitHub can be a few minutes late) is tolerated.
+#
+# GitHub cron is UTC; WIB = UTC+7. The 9 daily WIB slots map to:
+#   08:00 09:00 10:00 11:00 12:00 → 01:00 02:00 03:00 04:00 05:00 UTC
+#   14:00 15:00                   → 07:00 08:00 UTC
+#   13:30 15:30                   → 06:30 08:30 UTC
+# 13:00 WIB (06:00 UTC) and 16:00 WIB (09:00 UTC) are deliberately omitted.
+#
+# Setup (one-time):
+#   - Repo secret  AUTO_SCREEN_TOKEN  = same value as the Vercel env var.
+#   - Repo variable AUTO_SCREEN_URL   = deployment base, e.g. https://your-app.vercel.app
+
+on:
+  schedule:
+    - cron: '0 1-5,7-8 * * 1-5' # 08:00–12:00 & 14:00–15:00 WIB, Mon–Fri
+    - cron: '30 6,8 * * 1-5' #    13:30 (session-2 open) & 15:30 (pre-close) WIB, Mon–Fri
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run even if outside a scan slot (testing)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: auto-screen
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger auto-screen run
+        env:
+          BASE_URL: ${{ vars.AUTO_SCREEN_URL }}
+          TOKEN: ${{ secrets.AUTO_SCREEN_TOKEN }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$TOKEN" ]; then
+            echo "::error::AUTO_SCREEN_URL (repo variable) and AUTO_SCREEN_TOKEN (repo secret) must be set."
+            exit 1
+          fi
+          QS=""
+          if [ "$FORCE" = "true" ]; then QS="?force=1"; fi
+          echo "POST $BASE_URL/api/auto-screen-run$QS"
+          curl -fsS --max-time 90 -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            "$BASE_URL/api/auto-screen-run$QS"

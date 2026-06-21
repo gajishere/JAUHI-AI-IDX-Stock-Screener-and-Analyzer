@@ -5,6 +5,65 @@ import process from 'node:process'
 
 const IDX_HOST = 'indonesia-stock-exchange-idx.p.rapidapi.com'
 
+// Dev-only stand-in for the Vercel serverless auto-screen endpoints (Vite's dev
+// server doesn't execute /api functions). It runs the SAME autoScreen() in the
+// dev Node process — its fetches hit this very dev server's /idx + /yf proxies
+// (apiBase falls back to http://localhost:5177 in Node) — and caches the result
+// in memory instead of Vercel Blob. So /api/auto-screen-latest and
+// /api/auto-screen-run behave locally just like production.
+function autoScreenDevApi() {
+  let cache = null
+  let scanning = false
+  const runScan = async () => {
+    scanning = true
+    try {
+      const { autoScreen } = await import('./src/lib/autoScreen.js')
+      cache = await autoScreen({ count: 5 })
+      return cache
+    } finally {
+      scanning = false
+    }
+  }
+  const sendJson = (res, body, status = 200) => {
+    res.statusCode = status
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify(body))
+  }
+  return {
+    name: 'auto-screen-dev-api',
+    configureServer(server) {
+      // Point the in-process autoScreen() at THIS dev server's own origin (it
+      // reaches the live data through our own /idx + /yf proxies). Set before the
+      // first request so apiBase picks it up when autoScreen is dynamically
+      // imported. Honors an explicit SELF_ORIGIN override if one is set.
+      const setOrigin = () => {
+        if (process.env.SELF_ORIGIN || process.env.DEV_PROXY_ORIGIN) return
+        const addr = server.httpServer?.address()
+        const port = addr && typeof addr === 'object' ? addr.port : server.config.server?.port || 5177
+        process.env.DEV_PROXY_ORIGIN = `http://localhost:${port}`
+      }
+      server.httpServer?.once('listening', setOrigin)
+      setOrigin()
+
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url || '').split('?')[0]
+        if (path === '/api/auto-screen-latest') {
+          // Lazily kick off a background scan the first time; polling picks it up.
+          if (!cache && !scanning) runScan().catch(() => {})
+          return sendJson(res, cache || { status: scanning ? 'scanning' : 'no-snapshot', candidates: [] })
+        }
+        if (path === '/api/auto-screen-run') {
+          runScan()
+            .then((snap) => sendJson(res, snap))
+            .catch((e) => sendJson(res, { ok: false, error: String(e?.message || e) }, 500))
+          return
+        }
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // Load every env var (empty prefix) so we can read the un-prefixed, server-only
@@ -14,7 +73,7 @@ export default defineConfig(({ mode }) => {
   const claudeKey = env.CLAUDE_API_KEY
 
   return {
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), autoScreenDevApi()],
   server: {
     port: 5177,
     proxy: {

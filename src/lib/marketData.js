@@ -2,7 +2,9 @@
 // (IDX tickers carry the .JK suffix). Requests go through the Vite
 // dev-server proxy at /yf to avoid CORS.
 
-const BASE = '/yf';
+import { YF_BASE } from './apiBase.js';
+
+const BASE = YF_BASE; // '/yf' in the browser; absolute origin + /yf in Node
 
 function toSymbol(code) {
   return `${code.trim().toUpperCase()}.JK`;

@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import ApiStatusPage from './pages/ApiStatusPage';
+import AutoScreeningPage from './pages/AutoScreeningPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
 import { SettingsMenu } from './components/SettingsMenu';
@@ -9,7 +10,9 @@ import { useT } from './lib/i18n';
 function App() {
   const t = useT();
   const location = useLocation();
-  const isAnalysisPage = location.pathname === '/analysis' || location.pathname === '/';
+  // The live auto-screener is the default landing page (route '/').
+  const isAutoPage = location.pathname === '/' || location.pathname === '/auto-screening';
+  const isAnalysisPage = location.pathname === '/analysis';
   const isScreeningPage = location.pathname === '/screening';
   const isApiStatusPage = location.pathname === '/api-status';
 
@@ -32,6 +35,16 @@ function App() {
               {t('Screening', 'Penyaringan')}
             </h1>
             <nav className="-mx-2 mt-2 flex flex-wrap gap-x-3 gap-y-1 sm:mx-0 sm:mt-4 sm:gap-x-6">
+              <Link
+                to="/"
+                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
+                  isAutoPage
+                    ? 'border-brand text-ink'
+                    : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
+                }`}
+              >
+                {t('Live Screening', 'Penyaringan Langsung')}
+              </Link>
               <Link
                 to="/analysis"
                 className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
@@ -74,6 +87,9 @@ function App() {
             /screening; everything else (including the default route) shows
             Analysis. `hidden` is display:none, so the inactive tab also leaves
             the accessibility tree and tab order. */}
+        <div className="route-panel" hidden={!isAutoPage}>
+          <AutoScreeningPage />
+        </div>
         <div className="route-panel" hidden={!isAnalysisPage}>
           <StockAnalysisPage />
         </div>
