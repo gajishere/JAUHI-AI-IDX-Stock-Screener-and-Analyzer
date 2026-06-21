@@ -137,10 +137,7 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
       {/* Kicker sits on the strongest part of the verdict gradient, where the
           muted token drops below AA — use a 70% ink so it clears 4.5:1 on the
           full tint in both themes without going full-weight. */}
-      <p className="font-mono text-xs text-ink/70">
-        {t('your question', 'pertanyaan anda')}
-      </p>
-      <p className="mt-1 font-serif text-lg font-medium">{question}</p>
+      <p className="font-serif text-lg font-medium">{question}</p>
 
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className={`font-serif text-4xl font-medium tracking-tight sm:text-5xl ${style.word}`}>{word}</span>
