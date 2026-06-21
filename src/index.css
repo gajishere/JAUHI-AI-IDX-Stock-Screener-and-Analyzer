@@ -890,6 +890,70 @@
     margin-top: 0;
   }
 
+  /* ===== Hamburger ↔ X morph =====
+     Three stacked bars that spring into an X when the nav menu opens. The bars
+     translate to the vertical centre and counter-rotate ±45°; the middle bar
+     fades and collapses horizontally so it doesn't show through the cross. The
+     morph rides the SAME popover spring as the panel it toggles, so the icon and
+     the menu settle in lockstep. Transform/opacity only — no layout. */
+  .hamburger-lines {
+    position: relative;
+    width: 17px;
+    height: 12px;
+    flex: none;
+    color: currentColor;
+  }
+  .hamburger-lines span {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1.75px;
+    border-radius: 2px;
+    background: currentColor;
+    transition:
+      transform var(--spring-popover-dur) var(--spring-popover),
+      opacity 150ms var(--ease-out-quint);
+  }
+  .hamburger-lines span:nth-child(1) {
+    top: 0;
+  }
+  .hamburger-lines span:nth-child(2) {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .hamburger-lines span:nth-child(3) {
+    bottom: 0;
+  }
+  .hamburger-lines[data-open='true'] span:nth-child(1) {
+    transform: translateY(5.1px) rotate(45deg);
+  }
+  .hamburger-lines[data-open='true'] span:nth-child(2) {
+    opacity: 0;
+    transform: translateY(-50%) scaleX(0.35);
+  }
+  .hamburger-lines[data-open='true'] span:nth-child(3) {
+    transform: translateY(-5.1px) rotate(-45deg);
+  }
+
+  /* ===== Settings gear =====
+     A cog should turn. On hover/focus the gear gives a small mechanical nudge;
+     on open it holds a decisive quarter-plus turn, so the motion reports state
+     (menu engaged) rather than just decorating. Rides the same popover spring as
+     the hamburger morph, so the two header controls feel mechanically related.
+     Rotation only — cheap, GPU-friendly, no layout. */
+  .gear-icon {
+    transform-origin: 50% 50%;
+    transition: transform var(--spring-popover-dur) var(--spring-popover);
+  }
+  .settings-trigger:hover .gear-icon,
+  .settings-trigger:focus-visible .gear-icon {
+    transform: rotate(45deg);
+  }
+  /* Source-ordered after hover so the open state wins when both apply. */
+  .settings-trigger[data-open='true'] .gear-icon {
+    transform: rotate(135deg);
+  }
+
   .jauhi-scan {
     position: relative;
     display: inline-flex;
@@ -1077,6 +1141,19 @@
   .modal-leave,
   .modal-leave-backdrop {
     animation: none !important;
+  }
+  /* Header controls: state must still resolve (X / engaged gear), just without
+     the spin or the morph tween — snap to the end state instantly. */
+  .hamburger-lines span {
+    transition: none;
+  }
+  .gear-icon {
+    transition: none;
+  }
+  .settings-trigger:hover .gear-icon,
+  .settings-trigger:focus-visible .gear-icon,
+  .settings-trigger[data-open='true'] .gear-icon {
+    transform: none;
   }
   /* Neutralize the tactile press + spring transitions — state changes must
      still resolve, just instantly. And kill smooth scroll so the wheel/keys

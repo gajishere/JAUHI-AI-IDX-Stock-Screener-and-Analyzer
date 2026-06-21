@@ -140,7 +140,7 @@ function VerdictCard({ intent, ai, analysis, positionPnl }) {
           full tint in both themes without going full-weight. */}
       <p className="font-serif text-lg font-medium">{question}</p>
 
-      <div className="mt-4 flex flex-col items-start gap-x-3 gap-y-1 sm:flex-row sm:items-baseline">
+      <div className="mt-5 flex flex-col items-start gap-x-3 gap-y-1 sm:mt-6 sm:flex-row sm:items-baseline">
         <span className={`font-serif text-4xl font-medium tracking-tight sm:text-5xl ${style.word}`}>{word}</span>
         <span className="text-sm text-ink">{headline}</span>
       </div>

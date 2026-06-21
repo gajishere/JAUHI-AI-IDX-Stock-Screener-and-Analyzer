@@ -1,10 +1,12 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import ApiStatusPage from './pages/ApiStatusPage';
 import AutoScreeningPage from './pages/AutoScreeningPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
+import { NavMenu } from './components/NavMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { GlassFilter } from './components/LiquidGlass';
+import Logo from './components/Logo';
 import { useT } from './lib/i18n';
 
 function App() {
@@ -21,61 +23,29 @@ function App() {
       {/* Single shared refraction filter for every liquid-glass surface. */}
       <GlassFilter />
       <header className="border-b border-line">
-        <div className="mx-auto w-full max-w-4xl px-5 pt-[max(2rem,env(safe-area-inset-top))] sm:px-6 sm:pt-12">
-          <div className="space-y-5 sm:space-y-6">
-            <div className="flex items-start justify-between gap-4">
-              <p className="font-mono text-xs text-ink-muted">
-                {t('Indonesia Stock Exchange · flow research desk', 'Bursa Efek Indonesia · meja riset aliran dana')}
-              </p>
+        <div className="mx-auto w-full max-w-4xl px-5 pb-6 pt-[max(2rem,env(safe-area-inset-top))] sm:px-6 sm:pb-8 sm:pt-12">
+          <p className="font-mono text-xs text-ink-muted">
+            {t('Indonesia Stock Exchange · flow research desk', 'Bursa Efek Indonesia · meja riset aliran dana')}
+          </p>
+          {/* Wordmark and the two icon controls share this row, so the icons pin
+              to the title line — and because they're sized in the same step as the
+              title (h-9 → sm:h-10 alongside text-2xl → sm:text-3xl), the pairing
+              holds its vertical relationship at every breakpoint. The small top
+              nudge centres the icons on the wordmark's cap band rather than its
+              full line box. */}
+          <div className="mt-2.5 flex items-start justify-between gap-4">
+            <h1 className="flex min-w-0 items-start gap-3 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
+              <Logo className="mt-1 h-5 w-auto shrink-0 sm:mt-[3px] sm:h-6" />
+              <span className="min-w-0">
+                {t('IDX Stock Analysis', 'Analisis Saham IDX')}{' '}
+                <span className="font-normal italic text-ink-muted">&</span>{' '}
+                {t('Screening', 'Penyaringan')}
+              </span>
+            </h1>
+            <div className="-mt-1 flex shrink-0 items-center gap-2 sm:-mt-1.5">
+              <NavMenu />
               <SettingsMenu />
             </div>
-            <h1 className="mt-0 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
-              {t('IDX Stock Analysis', 'Analisis Saham IDX')}{' '}
-              <span className="font-normal italic text-ink-muted">&</span>{' '}
-              {t('Screening', 'Penyaringan')}
-            </h1>
-            <nav className="-mx-2 mt-2 flex flex-wrap gap-x-3 gap-y-1 sm:mx-0 sm:mt-4 sm:gap-x-6">
-              <Link
-                to="/"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
-                  isAutoPage
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
-                }`}
-              >
-                {t('Live Screening', 'Penyaringan Langsung')}
-              </Link>
-              <Link
-                to="/analysis"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
-                  isAnalysisPage
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
-                }`}
-              >
-                {t('Stock Analysis', 'Analisis Saham')}
-              </Link>
-              <Link
-                to="/screening"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
-                  isScreeningPage
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
-                }`}
-              >
-                {t('Stock Screening', 'Penyaringan Saham')}
-              </Link>
-              <Link
-                to="/api-status"
-                className={`tactile-soft -mb-px inline-flex min-h-11 items-center border-b-2 px-2 text-sm font-medium sm:min-h-0 sm:px-0 sm:pb-3 ${
-                  isApiStatusPage
-                    ? 'border-brand text-ink'
-                    : 'border-transparent text-ink-muted hover:border-brand/20 hover:text-ink/80'
-                }`}
-              >
-                {t('API Status', 'Status API')}
-              </Link>
-            </nav>
           </div>
         </div>
       </header>

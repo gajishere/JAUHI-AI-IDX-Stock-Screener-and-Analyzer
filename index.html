@@ -2,9 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Favicon: an SVG with a built-in prefers-color-scheme swap, plus PNG
+         fallbacks for the browsers/contexts that don't render SVG favicons. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/favicon.svg" color="#13b87a" />
+    <!-- OS chrome follows the active theme. Two meta tags + a media query let
+         the address bar/bookmark chrome match light or dark automatically. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0f12" media="(prefers-color-scheme: dark)" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>IDX Stock Analysis & Screening</title>
+    <!-- Social preview — the JA mark on a brand-tinted card. -->
+    <meta property="og:title" content="IDX Stock Analysis & Screening" />
+    <meta property="og:description" content="Indonesia Stock Exchange · flow research desk" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/og-image.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

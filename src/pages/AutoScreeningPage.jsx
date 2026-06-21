@@ -217,7 +217,7 @@ function CandidateCard({ c, rank, index }) {
           </div>
 
           {/* signal chips */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {s.goldenTrend && <Pill tone="pos">{t('Golden cross', 'Golden cross')}</Pill>}
             {s.rsi14 != null && <Pill tone="info">RSI {Math.round(s.rsi14)}</Pill>}
             {s.volumeRatio != null && (
@@ -371,13 +371,13 @@ export default function AutoScreeningPage() {
         </button>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-5">
         <StatusBar snapshot={snapshot} />
       </div>
 
       {/* market-closed banner */}
       {marketClosed && status === 'ready' && (
-        <div className="mt-5 rounded-xl border border-line bg-well/50 px-4 py-3 text-sm text-ink-muted">
+        <div className="mt-4 rounded-xl border border-line bg-well/50 px-4 py-3 text-sm text-ink-muted">
           {t(
             'Market is closed — showing the last session’s pre-close list (your overnight watchlist).',
             'Pasar tutup — menampilkan daftar jelang penutupan sesi terakhir (watchlist semalam Anda).',
@@ -386,7 +386,7 @@ export default function AutoScreeningPage() {
       )}
 
       {/* picks */}
-      <div className="mt-6">
+      <div className="mt-9">
         {status === 'loading' && (
           <div className="space-y-4">
             {[0, 1, 2].map((i) => (
