@@ -12,7 +12,15 @@
 // Pipeline:
 //   1. Seed   = live IDX trending movers  ∪  Yahoo momentum universe shortlist
 //   2. Enrich = Yahoo chart per seed → buildScreeningScore (momentum signals)   [free]
-//   3. Gate   = JAUHI (bank / ≥Rp100T) + Momentum criteria + SAHAM LAMBAT velocity
+//   3. Gate   = JAUHI (bank / ≥Rp100T) + liquidity floor + RVOL spike +
+//               Momentum criteria + SAHAM LAMBAT velocity
+//               Liquidity gates (tradability, not prestige):
+//                 • marketCap ≥ Rp 100M  — drops zombie/shell stocks (< Rp 50M)
+//                   while keeping genuinely active small-caps like SDMU
+//                 • turnover today ≥ Rp 10M — minimum real-money flow so a
+//                   Rp 50juta position can realistically enter AND exit
+//                 • RVOL ≥ 2  — today's volume must be ≥ 2× MA20; ensures the
+//                   activity is an anomaly (accumulation / breakout), not noise
 //   4. Rank   = velocity-first, then composite (the Momentum category's own rank)
 //   5. Live   = for the top `count` finalists only: IDX stock-info (live price/
 //               volume overlay) + as-of-session bandarmology, folded into score   [≤2 IDX req each]
@@ -106,12 +114,24 @@ async function enrich(ticker, date) {
     return null;
   }
 
+  // Today's turnover (close × volume on the last candle) and RVOL (today / MA20).
+  // Computed here from candles because buildScreeningScore only exposes avgValueTraded20.
+  const lastCandle = asOfCandles[asOfCandles.length - 1];
+  const lastValueTraded = lastCandle ? lastCandle.close * (lastCandle.volume ?? 0) : 0;
+  const volLookback = Math.min(20, asOfCandles.length);
+  let volSum = 0;
+  for (let i = asOfCandles.length - volLookback; i < asOfCandles.length; i++) volSum += asOfCandles[i].volume ?? 0;
+  const avgVol20 = volLookback > 0 ? volSum / volLookback : 0;
+  const rvol = avgVol20 > 0 ? (lastCandle?.volume ?? 0) / avgVol20 : 0;
+
   return {
     ...score,
     sector: emitenInfo?.sector ?? score.sector ?? null,
     fundamentals: null,
     bandarmology: null,
     turnover: score.avgValueTraded20 ?? 0,
+    lastValueTraded,
+    rvol,
     velocityOk: passesVelocity(asOfCandles),
     reason: null,
     _chart: datedChart,
@@ -149,6 +169,8 @@ function serialize(d, category) {
       goldenTrend: !!s.goldenTrend,
     },
     velocityOk: !!d.velocityOk,
+    rvol: round(d.rvol, 2),
+    lastValueTraded: typeof d.lastValueTraded === 'number' ? Math.round(d.lastValueTraded) : null,
     reason: (() => {
       try {
         return category.describe(d);
@@ -213,10 +235,19 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
   ).filter(Boolean);
 
-  // 3. JAUHI (cheap re-check on the scored data) + Momentum criteria.
-  const eligible = enriched.filter(
-    (d) => !(category.jauhi && (isBankName(d.name) || (d.marketCap != null && d.marketCap >= 1e14)))
-  );
+  // 3. JAUHI (cheap re-check on the scored data) + liquidity gates + Momentum criteria.
+  const eligible = enriched.filter((d) => {
+    // JAUHI: drop banks and mega-caps (≥ Rp 100T)
+    if (category.jauhi && (isBankName(d.name) || (d.marketCap != null && d.marketCap >= 1e14))) return false;
+    // Drop zombie / shell stocks below Rp 100 Miliar market cap.
+    // Null cap (missing emiten data) passes through rather than being silently dropped.
+    if (d.marketCap != null && d.marketCap < 1e11) return false;
+    // Today's trading value must be ≥ Rp 10 Miliar so a Rp 50juta position can exit.
+    if (d.lastValueTraded < 1e10) return false;
+    // RVOL must be ≥ 2× MA20 — genuine accumulation spike, not ordinary drift.
+    if (d.rvol < 2) return false;
+    return true;
+  });
   const matched = eligible.filter((d) => matchesCategory(category, d));
 
   // 4. Velocity-first ordering, then the category's composite rank.
@@ -283,7 +314,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     candidates,
     summary:
       `Seeded ${trendingCodes.length} live movers + ${scanCodes.length} scan names ` +
-      `(${seed.length} unique) → ${enriched.length} scored → ${matched.length} momentum matches → ` +
-      `top ${candidates.length}.`,
+      `(${seed.length} unique) → ${enriched.length} scored → ${eligible.length} passed liquidity gates → ` +
+      `${matched.length} momentum matches → top ${candidates.length}.`,
   };
 }
