@@ -6,15 +6,17 @@
 // host clock's local time; we always project `now` into WIB via Intl, so the
 // schedule is identical everywhere.
 //
-// The schedule is an explicit list of WIB clock slots (not "every hour"):
-//   08:00  pre-market scan (must run unattended)
-//   09:00 10:00 11:00 12:00   session 1 (09:00–12:00); 12:00 is the session-1
-//                             close AND the single lunch read — data freezes
-//                             during the 12:00–13:30 break, so 13:00 is skipped
-//   13:30  session 2 open (first scan of session 2)
-//   14:00 15:00               session 2
-//   15:30  pre-close scan — the day's LAST scan ("what to hold overnight");
-//          16:00 is the close, so a 16:00 scan would be too late.
+// The schedule is an explicit list of WIB clock slots, every 15 minutes across
+// the active trading window (matching a 15-minute external cron so each fire
+// produces a real scan, not a deduped no-op):
+//   08:00–08:45  pre-market scans (must run unattended)
+//   09:00–12:00  session 1, every 15 min; 12:00 is the session-1 close AND the
+//                single lunch read — data freezes during the 12:00–13:30 break,
+//                so there are NO slots until 13:30 (lunch crons harmlessly no-op
+//                rather than re-scanning identical frozen data)
+//   13:30–15:15  session 2, every 15 min
+//   15:30        pre-close scan — the day's LAST scan ("what to hold overnight");
+//                16:00 is the close, so a later scan would be too late.
 //
 // Both the server gate (api/auto-screen-run.js) and the page's status badge /
 // countdown read from this module so they can never disagree.
@@ -25,15 +27,14 @@ const TZ = 'Asia/Jakarta';
 
 // The day's scan slots in WIB, as 'HH:MM' strings. Order matters (ascending).
 export const SCAN_SLOTS = [
-  '08:00',
-  '09:00',
-  '10:00',
-  '11:00',
-  '12:00',
-  '13:30',
-  '14:00',
-  '15:00',
-  '15:30',
+  '08:00', '08:15', '08:30', '08:45',
+  '09:00', '09:15', '09:30', '09:45',
+  '10:00', '10:15', '10:30', '10:45',
+  '11:00', '11:15', '11:30', '11:45',
+  '12:00', // session-1 close + single lunch read; data freezes until 13:30
+  '13:30', '13:45',
+  '14:00', '14:15', '14:30', '14:45',
+  '15:00', '15:15', '15:30',
 ];
 
 // Session boundaries in minutes-since-midnight (WIB).
@@ -125,7 +126,7 @@ export function isMarketOpen(now = new Date()) {
 
 // What kind of scan a given slot ('HH:MM') represents.
 export function scanTypeForSlot(hm) {
-  if (hm === '08:00') return 'pre-market';
+  if (hm < '09:00') return 'pre-market'; // 08:00–08:45, before the session-1 open
   if (hm === '15:30') return 'pre-close';
   return 'intraday';
 }
