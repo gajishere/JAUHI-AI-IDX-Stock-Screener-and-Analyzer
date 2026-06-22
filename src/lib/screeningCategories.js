@@ -58,7 +58,7 @@ export const CATEGORIES = [
     id: 'bluechip',
     label: 'Blue Chip & High Liquidity',
     blurb:
-      'Top-tier, deeply liquid names (LQ45/IDX30 territory). Safe for larger capital — overrides the usual bank/blue-chip exclusion. · Estimated time ~14s.',
+      'Top-tier, deeply liquid names (LQ45/IDX30 territory). Safe for larger capital — overrides the usual bank/blue-chip exclusion. Ranked by current strength, so the surfaced names rotate with the market instead of always returning the same mega-caps. · Estimated time ~14s.',
     tier1: 'size', // rank the universe by size/structure, not raw momentum
     jauhi: false, // the whole point — surface the blue chips JAUHI normally drops
     fundamentals: true, // for ROA
@@ -70,9 +70,15 @@ export const CATEGORIES = [
       { label: 'Turnover ≥ Rp 5B/day', ok: (d.turnover ?? 0) >= 5e9, detail: `${formatRpCompact(d.turnover)}/day` },
       { label: 'Profitable: ROA > 0', ok: d.fundamentals?.roa == null || d.fundamentals.roa > 0, detail: d.fundamentals?.roa != null ? pct(d.fundamentals.roa) : 'n/a' },
     ],
-    rank: (a, b) => b.turnover - a.turnover, // most liquid first
+    // Rank by the daily-varying composite (trend/momentum/value-aware) rather
+    // than raw turnover. Turnover ordering among IDX mega-caps is effectively
+    // frozen, so the old rank returned the same five names every day; composite
+    // rotates the surfaced set with the market while the liquidity floor above
+    // keeps every candidate genuinely tradeable. Turnover breaks ties.
+    rank: (a, b) => ((b.composite ?? 0) - (a.composite ?? 0)) || ((b.turnover ?? 0) - (a.turnover ?? 0)),
     describe: (d) =>
       `Blue chip — ${formatRpCompact(d.marketCap)} cap, ${formatRpCompact(d.turnover)}/day` +
+      (d.oneMonth != null ? `, ${pct(d.oneMonth)} 1M` : '') +
       (d.fundamentals?.roa != null ? `, ROA ${pct(d.fundamentals.roa)}` : ''),
   },
   {

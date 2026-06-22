@@ -15,7 +15,7 @@ import { Modal } from '../components/Modal';
 import { LiquidGlass } from '../components/LiquidGlass';
 import { BrokerActionGauge, BrokerActionColumns } from '../components/BrokerAction';
 import { ratingFromScore, toScoreTen, formatPct, formatRp } from '../lib/analysis';
-import { screeningStage1, screeningStage2, diagnoseStock } from '../lib/screeningService';
+import { screeningStage1, screeningStage2, diagnoseStock, fetchCandidateBandarmology } from '../lib/screeningService';
 import { CATEGORIES, DEFAULT_CATEGORY, CAP_TIERS, getCategory } from '../lib/screeningCategories';
 import { SECTORS, searchEmiten, findEmiten } from '../lib/universe';
 import { conglomerateGroup } from '../data/conglomerates';
@@ -263,7 +263,7 @@ function WhyNotRecommended({ date, filters, results }) {
       {err && !loading && <p className="mt-4 text-sm text-neg">{err}</p>}
 
       {diag && !loading && (
-        <div className="surface-raised mt-5 max-w-md rounded-xl border border-line p-4">
+        <div className="glass-surface mt-5 max-w-md rounded-xl p-4">
           <div className="flex items-baseline justify-between gap-3">
             <p className="font-mono text-sm font-semibold text-ink">{diag.ticker}</p>
             <Pill tone={tone}>
@@ -348,9 +348,11 @@ export default function StockScreeningPage() {
   // AI usage tracking
   const [aiUsed, setAiUsed] = useState(false);
   // Inline broker-summary expansion: which candidate row is expanded. Toggling
-  // the same ticker collapses it. Data comes straight from the already-loaded
-  // bandarmology on each candidate — no extra fetch.
+  // the same ticker collapses it. Bandarmology is loaded lazily on first expand
+  // (kept off the screen's critical path), then cached on the candidate row.
   const [expandedBandarTicker, setExpandedBandarTicker] = useState(null);
+  // Ticker whose broker tape is currently being fetched (null = idle).
+  const [bandarLoading, setBandarLoading] = useState(null);
 
   // Framework JAUHI AI — real macro context + AI top-down narrative
   const [macro, setMacro] = useState(null);
@@ -551,10 +553,32 @@ export default function StockScreeningPage() {
     runScreening(value);
   };
 
-  // Toggle inline broker-summary expansion for a candidate row. The bandarmology
-  // data is already attached to the candidate, so this is pure state flip.
+  // Toggle inline broker-summary expansion for a candidate row. Bandarmology is
+  // fetched lazily on the first expand (it's off the screen's critical path),
+  // then cached on the row so re-expanding is instant. A `{ empty: true }`
+  // sentinel marks "fetched, no broker tape" so we don't re-request it.
   const toggleBandarExpand = (ticker) => {
-    setExpandedBandarTicker((prev) => (prev === ticker ? null : ticker));
+    const collapsing = expandedBandarTicker === ticker;
+    setExpandedBandarTicker(collapsing ? null : ticker);
+    if (collapsing) return;
+
+    const row = initialScreenings.find((s) => s.ticker === ticker);
+    if (!row || row.bandarmology || !row.bandarSessions?.length) return; // loaded or no inputs
+
+    setBandarLoading(ticker);
+    fetchCandidateBandarmology(ticker, { asOfDate: row.bandarAsOf, sessions: row.bandarSessions })
+      .then((bandar) => {
+        const loaded = bandar || { empty: true };
+        setInitialScreenings((list) =>
+          list.map((s) => (s.ticker === ticker ? { ...s, bandarmology: loaded } : s)),
+        );
+      })
+      .catch(() => {
+        setInitialScreenings((list) =>
+          list.map((s) => (s.ticker === ticker ? { ...s, bandarmology: { empty: true } } : s)),
+        );
+      })
+      .finally(() => setBandarLoading((cur) => (cur === ticker ? null : cur)));
   };
 
   const addBrokerScreenshots = (incoming) => {
@@ -1133,17 +1157,23 @@ export default function StockScreeningPage() {
                     </span>
                   )}
                   {s.overallRating && <RatingFigure rating={s.overallRating} className="w-7 shrink-0 text-left text-sm" />}
-                  {s.bandarmology?.accdist && (
+                  {(s.bandarmology?.accdist || s.bandarSessions?.length > 0) && (
                     <button
                       onClick={() => toggleBandarExpand(s.ticker)}
                       aria-expanded={expanded}
                       title={t(
-                        'Broker accumulation/distribution for the session — folded into the rating. Click to expand the broker summary.',
-                        'Akumulasi/distribusi broker untuk sesi ini — diperhitungkan dalam peringkat. Klik untuk membuka ringkasan broker.',
+                        'Broker accumulation/distribution for the session. Click to load and expand the broker summary.',
+                        'Akumulasi/distribusi broker untuk sesi ini. Klik untuk memuat dan membuka ringkasan broker.',
                       )}
                       className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 transition-colors hover:bg-well/70"
                     >
-                      <Pill tone={accTone(s.bandarmology.accdist)}>{s.bandarmology.accdist}</Pill>
+                      {s.bandarmology?.accdist ? (
+                        <Pill tone={accTone(s.bandarmology.accdist)}>{s.bandarmology.accdist}</Pill>
+                      ) : (
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                          {bandarLoading === s.ticker ? t('Loading…', 'Memuat…') : t('Broker tape', 'Tape broker')}
+                        </span>
+                      )}
                       <svg
                         className="h-3 w-3 shrink-0 text-ink-muted transition-transform duration-200"
                         style={{ transform: expanded ? 'rotate(180deg)' : undefined }}
@@ -1160,13 +1190,21 @@ export default function StockScreeningPage() {
                     grid-template-rows collapse can animate 0fr→1fr (unmounting
                     on collapse would leave no node to transition). Uses the same
                     .details-collapse treatment as the report's details section. */}
-                {s.bandarmology && (
+                {(s.bandarmology || bandarLoading === s.ticker) && (
                   <div
                     className={`details-collapse details-collapse-tight ${expanded ? 'details-collapse-open' : ''}`}
                     aria-hidden={!expanded}
                   >
                     <div className="pb-3 pl-8 pr-1">
-                      <BandarSummary bandar={s.bandarmology} />
+                      {bandarLoading === s.ticker ? (
+                        <p className="text-xs text-ink-muted">{t('Loading broker tape…', 'Memuat tape broker…')}</p>
+                      ) : s.bandarmology?.accdist ? (
+                        <BandarSummary bandar={s.bandarmology} />
+                      ) : (
+                        <p className="text-xs text-ink-muted">
+                          {t('No broker tape for this session.', 'Tidak ada tape broker untuk sesi ini.')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

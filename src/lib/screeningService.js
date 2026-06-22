@@ -4,7 +4,7 @@
 
 import { fetchSymbolChart, fetchFundamentals } from './marketData.js';
 import { buildScreeningScore, formatRpCompact, formatPct } from './analysis.js';
-import { fetchBandarmology, fetchBandarmologyRange } from './idxApi.js';
+import { fetchBandarmologyRange } from './idxApi.js';
 import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory, qualifiesByChecks, capTierBounds } from './screeningCategories.js';
@@ -14,7 +14,27 @@ import { rejectWithReason } from './claudeAI';
 // Bounded concurrency for the Tier-2 deep-enrich (each candidate = 1 chart +
 // 1 fundamentals fetch); keeps the proxy/Yahoo from being hammered.
 const ENRICH_CONCURRENCY = 5;
+const BANDAR_SESSIONS = 5; // trailing sessions aggregated for the Acc/Dist read
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Lazy per-candidate bandarmology — called by the client when a result row is
+// expanded, instead of blocking the screen on the throttled (~1 req/s) IDX API.
+// Reads the same range cache the overlap pre-warm in screeningStage1 populated,
+// so an expand right after a screen is typically a warm-cache hit. Returns the
+// aggregate (with `.accdist`) or null when there's no broker tape for the week.
+export async function fetchCandidateBandarmology(ticker, { asOfDate, sessions, sessionCount = BANDAR_SESSIONS } = {}) {
+  if (!ticker || !asOfDate || !Array.isArray(sessions) || sessions.length === 0) return null;
+  try {
+    const bandar = await fetchBandarmologyRange(ticker, {
+      asOfDate,
+      tradingSessions: sessions,
+      sessionCount,
+    });
+    return bandar && !bandar.empty ? bandar : null;
+  } catch {
+    return null;
+  }
+}
 const MIN_PRE_DATE_LOOKBACK_DAYS = 120;
 
 function screeningRangeForDate(date) {
@@ -560,15 +580,29 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       ordered = [...matched].sort(category.rank);
     }
 
-    // Pre-warm bandarmology for the deterministic top-N WHILE the AI judge runs.
-    // Both are ~10s and independent; the IDX throttle (~1 req/s) fits ≤count
-    // fetches inside the judge's window, so by the time the judge returns the
-    // re-score below reads them straight from cache. The AI judge only applies
-    // soft rank nudges, so the surfaced set rarely changes — any name it newly
-    // promotes simply misses the warm cache and fetches on demand (still cached).
+    // Trailing trading sessions (on/before the as-of session) for a candidate —
+    // the input the bandarmology range fetch keys off. Shared by the overlap
+    // pre-warm here and the lazy per-card fetch on the client.
+    const bandarSessionsFor = (rc) =>
+      (rc?.chart?.candles ?? []).filter((cd) => cd.date <= rc.asOfSession).map((cd) => cd.date);
+
+    // Overlap pre-warm: kick off the FULL bandarmology range (BANDAR_SESSIONS per
+    // name) for the deterministic top-N *before* the AI judge, fire-and-forget.
+    // The IDX throttle (~1 req/s) means these serialize, but they now resolve
+    // *during* the judge's idle window instead of after it — and they land in the
+    // shared range/session cache. The client loads the Acc/Dist pill lazily (on
+    // card expand), reading that warm cache, so no broker fetch sits on the
+    // critical path. A name the judge newly promotes simply warms on demand.
     for (const c of ordered.slice(0, count)) {
       const rc = rescoreByTicker.get(c.ticker);
-      if (rc) fetchBandarmology(c.ticker, { date: rc.asOfSession }).catch(() => {});
+      const sessions = bandarSessionsFor(rc);
+      if (rc && sessions.length) {
+        fetchBandarmologyRange(c.ticker, {
+          asOfDate: rc.asOfSession,
+          tradingSessions: sessions,
+          sessionCount: BANDAR_SESSIONS,
+        }).catch(() => {});
+      }
     }
 
     // AI Judgment Layer: Review matched candidates and provide explanations
@@ -614,62 +648,24 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
         });
     }
 
-    let finalCandidates = ordered.slice(0, count).map((d) => ({
-      ...d,
-      reason: d.aiReason ? d.aiReason : category.describe(d),
-    }));
-
-    // Bandarmology re-score — only the surfaced top-N hit the throttled (~1 req/s)
-    // IDX API, so this is ≤ count names instead of one per shortlisted name.
-    // Each is read over the trailing WEEK (W-1): the last 5 trading sessions are
-    // fetched and aggregated client-side, folded into the score so it becomes
-    // part of the displayed rating, and attached for the candidate row's Acc/Dist
-    // pill. The as-of session was already pre-warmed above, so the range fetch
-    // only incurs the ~4 extra sessions per name.
-    finalCandidates = await Promise.all(
-      finalCandidates.map(async (c) => {
-        const rescore = rescoreByTicker.get(c.ticker);
-        if (!rescore) return c;
-        let bandar = null;
-        try {
-          bandar = await fetchBandarmologyRange(c.ticker, {
-            asOfDate: rescore.asOfSession,
-            tradingSessions: (rescore.chart?.candles ?? [])
-              .filter((cd) => cd.date <= rescore.asOfSession)
-              .map((cd) => cd.date),
-            sessionCount: 5,
-          });
-        } catch (e) {
-          console.warn(`Bandarmology range fetch failed for ${c.ticker}:`, e.message);
-        }
-        if (!bandar || bandar.empty) return c; // no broker rows — keep bandar-free score
-        let rescored;
-        try {
-          rescored = buildScreeningScore({
-            code: c.ticker,
-            requestedDate: date,
-            chart: rescore.chart,
-            fundamentals: rescore.fundamentals,
-            emitenInfo: rescore.emitenInfo,
-            bandarmology: bandar,
-          });
-        } catch {
-          return { ...c, bandarmology: bandar }; // show the pill even if re-score fails
-        }
-        return {
-          ...c,
-          composite: rescored.composite,
-          overallRating: rescored.overallRating,
-          scores: rescored.scores,
-          keyDriver: rescored.keyDriver,
-          bandarmology: bandar,
-        };
-      }),
-    );
-    lap(`bandar-rescore (top ${finalCandidates.length})`);
-    // Bandarmology can shift scores within the surfaced set — re-sort so the
-    // displayed order reflects the complete rating.
-    finalCandidates.sort((a, b) => b.composite - a.composite);
+    // Surface the deterministic + AI-judged ranking immediately. Bandarmology is
+    // NO LONGER folded into the score on the critical path — fetching the broker
+    // tape for the top-N over the throttled IDX API cost ~37s of dead wait. The
+    // overlap pre-warm above has already (or nearly) cached it; the client loads
+    // the Acc/Dist pill lazily on card expand via fetchCandidateBandarmology,
+    // passing back the bandar inputs we attach here. `bandarmology: null` means
+    // "not loaded yet", not "no data".
+    const finalCandidates = ordered.slice(0, count).map((d) => {
+      const rc = rescoreByTicker.get(d.ticker);
+      return {
+        ...d,
+        reason: d.aiReason ? d.aiReason : category.describe(d),
+        bandarmology: null,
+        bandarAsOf: rc?.asOfSession ?? null,
+        bandarSessions: bandarSessionsFor(rc),
+      };
+    });
+    lap('finalize (bandar lazy)');
 
     console.log(`[screening:timing] total: ${Date.now() - tStart}ms`);
     return {
