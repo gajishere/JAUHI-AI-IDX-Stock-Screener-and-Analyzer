@@ -130,24 +130,40 @@ export function scanTypeForSlot(hm) {
   return 'intraday';
 }
 
-// True if `now` (WIB) is at one of the scan slots, within `graceMinutes` after
-// the slot (external cron can fire a few minutes late; we never fire early).
-// Returns the matched slot info, or null. Always false on non-trading days.
-export function currentScanSlot(now = new Date(), graceMinutes = 5) {
+// The scan slot that "owns" the current moment: the latest slot whose start is
+// at or before `now`, provided we're still inside that slot's window (before the
+// next slot starts, or before the 16:00 close for the final 15:30 slot).
+//
+// This is deliberately drift-TOLERANT. GitHub Actions scheduled crons routinely
+// fire 10–40 min late (the top-of-hour batch is the most congested), so a tight
+// ±5-min grace silently dropped the 08:00 scan whenever the runner was delayed.
+// With slot ownership, a late 08:00 cron arriving any time before 09:00 still
+// resolves to the 08:00 slot. The run endpoint dedups by slot+date so this never
+// double-scans, and firing extra cron ticks per slot just no-ops harmlessly.
+// Returns the matched slot info, or null. Always null on non-trading days.
+export function owningScanSlot(now = new Date()) {
   const w = wibNow(now);
   if (!isTradingDay(w.dateStr)) return null;
+  let owned = null;
   for (let i = 0; i < SCAN_SLOTS.length; i++) {
-    const slotMin = SLOT_MINUTES[i];
-    if (w.minutes >= slotMin && w.minutes <= slotMin + graceMinutes) {
+    if (w.minutes < SLOT_MINUTES[i]) break; // slots are ascending — nothing later owns us
+    const windowEnd = i + 1 < SLOT_MINUTES.length ? SLOT_MINUTES[i + 1] : CLOSE;
+    if (w.minutes < windowEnd) {
       const hm = SCAN_SLOTS[i];
-      return { slot: hm, scanType: scanTypeForSlot(hm), wib: w };
+      owned = { slot: hm, scanType: scanTypeForSlot(hm), wib: w };
     }
   }
-  return null;
+  return owned;
 }
 
-export function isScanSlot(now = new Date(), graceMinutes = 5) {
-  return currentScanSlot(now, graceMinutes) != null;
+// Back-compat alias: callers that just want "which slot are we in" get the
+// drift-tolerant owning slot. (The old ±grace matcher is gone — it was the bug.)
+export function currentScanSlot(now = new Date()) {
+  return owningScanSlot(now);
+}
+
+export function isScanSlot(now = new Date()) {
+  return owningScanSlot(now) != null;
 }
 
 // The next scan slot strictly after `now`, with minutes until it. If no slots
@@ -204,12 +220,12 @@ function addDays(dateStr, days) {
 
 // Server-side gate decision in one call: should a scan run right now?
 // Returns { ok, reason, slot?, scanType?, dateStr }.
-export function shouldScanNow(now = new Date(), graceMinutes = 5) {
+export function shouldScanNow(now = new Date()) {
   const w = wibNow(now);
   if (!isTradingDay(w.dateStr)) {
     return { ok: false, reason: 'not-a-trading-day', dateStr: w.dateStr };
   }
-  const slot = currentScanSlot(now, graceMinutes);
+  const slot = owningScanSlot(now);
   if (!slot) {
     return { ok: false, reason: 'not-a-scan-slot', dateStr: w.dateStr, hm: w.hm };
   }

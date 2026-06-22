@@ -27,7 +27,7 @@ import { fetchMarketMovers, fetchStockInfo, fetchBandarmology } from './idxApi.j
 import { findEmiten } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory } from './screeningCategories.js';
-import { wibNow, marketStatus, currentScanSlot } from './marketHours.js';
+import { wibNow, marketStatus, owningScanSlot } from './marketHours.js';
 
 const RANGE = '1y'; // enough history for MA200 / RSI(14)
 const ENRICH_CONCURRENCY = 5; // Yahoo charts (free, proxied)
@@ -269,7 +269,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
   withLive.sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
   const candidates = withLive.map((d) => serialize(d, category));
 
-  const slot = currentScanSlot(now);
+  const slot = owningScanSlot(now);
   return {
     generatedAt: new Date().toISOString(),
     wibDate: date,

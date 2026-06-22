@@ -4,11 +4,16 @@ name: IDX Auto-Screen
 # token-protected Vercel run endpoint. The endpoint self-guards on the WIB
 # schedule, so cron drift (GitHub can be a few minutes late) is tolerated.
 #
-# GitHub cron is UTC; WIB = UTC+7. The 9 daily WIB slots map to:
-#   08:00 09:00 10:00 11:00 12:00 → 01:00 02:00 03:00 04:00 05:00 UTC
-#   14:00 15:00                   → 07:00 08:00 UTC
-#   13:30 15:30                   → 06:30 08:30 UTC
-# 13:00 WIB (06:00 UTC) and 16:00 WIB (09:00 UTC) are deliberately omitted.
+# GitHub cron is UTC; WIB = UTC+7. The trading window 08:00–16:00 WIB maps to
+# 01:00–09:00 UTC. We fire every 15 minutes across that window rather than once
+# per slot, because GitHub's scheduled runners are frequently delayed 10–40 min
+# (and occasionally drop a run) — the top-of-hour batch most of all. A single
+# on-the-hour cron therefore kept MISSING the 08:00 pre-market scan.
+#
+# The endpoint is drift-tolerant: each scan slot "owns" the time until the next
+# slot, so whichever tick lands first inside a slot's window runs that slot's
+# scan, and the rest dedup to a cheap no-op (already-scanned-this-slot). This
+# turns flaky cron timing into "at least one of four ticks per slot will fire."
 #
 # Setup (one-time):
 #   - Repo secret  AUTO_SCREEN_TOKEN  = same value as the Vercel env var.
@@ -16,8 +21,7 @@ name: IDX Auto-Screen
 
 on:
   schedule:
-    - cron: '0 1-5,7-8 * * 1-5' # 08:00–12:00 & 14:00–15:00 WIB, Mon–Fri
-    - cron: '30 6,8 * * 1-5' #    13:30 (session-2 open) & 15:30 (pre-close) WIB, Mon–Fri
+    - cron: '*/15 1-8 * * 1-5' # every 15 min, 08:00–15:59 WIB (01:00–08:59 UTC), Mon–Fri
   workflow_dispatch:
     inputs:
       force:
