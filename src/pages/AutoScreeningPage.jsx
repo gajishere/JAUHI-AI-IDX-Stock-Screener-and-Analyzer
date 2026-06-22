@@ -18,7 +18,10 @@ import { Pill, RatingFigure } from '../components/report';
 import { formatPct } from '../lib/analysis';
 import { marketStatus, nextScanSlot, wibNow } from '../lib/marketHours';
 
-const POLL_MS = 60_000;
+// The server cron regenerates the snapshot every 15 minutes, so polling faster
+// only refetches an unchanged Blob. Match the cron cadence; the on-focus refetch
+// below still pulls a fresh scan immediately whenever the user returns to the tab.
+const POLL_MS = 15 * 60_000;
 const formatRp = (v) => (v == null ? '—' : `Rp ${Math.round(v).toLocaleString('id-ID')}`);
 const signedPct = (p) => (p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(2)}%`);
 
@@ -277,7 +280,7 @@ export default function AutoScreeningPage() {
   const [status, setStatus] = useState('loading'); // loading | ready | scanning | empty | error
   const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef(null);
-  // The last scan timestamp we chimed for. The page polls every 60s + on focus,
+  // The last scan timestamp we chimed for. The page polls every 15 min + on focus,
   // so without this guard the chime would fire on every poll of the same list.
   // We only ding when a genuinely fresh scan lands (generatedAt changed).
   const lastAnnouncedAt = useRef(null);
