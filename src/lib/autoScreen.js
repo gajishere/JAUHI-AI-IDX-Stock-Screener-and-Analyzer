@@ -124,6 +124,29 @@ async function enrich(ticker, date) {
   const avgVol20 = volLookback > 0 ? volSum / volLookback : 0;
   const rvol = avgVol20 > 0 ? (lastCandle?.volume ?? 0) / avgVol20 : 0;
 
+  // ATR(14) for a live trading plan (entry / stop / targets).
+  // Stop = max(10-day swing low, close − 1.5×ATR). T1 = close + 2×ATR, T2 = close + 3.5×ATR.
+  const atrLookback = Math.min(14, asOfCandles.length - 1);
+  let atrTotal = 0;
+  for (let i = asOfCandles.length - atrLookback; i < asOfCandles.length; i++) {
+    const c = asOfCandles[i];
+    const prevClose = asOfCandles[i - 1]?.close ?? c.close;
+    atrTotal += Math.max(c.high - c.low, Math.abs(c.high - prevClose), Math.abs(c.low - prevClose));
+  }
+  const atr14 = atrLookback > 0 ? atrTotal / atrLookback : 0;
+  const recentLows = asOfCandles.slice(-10).map((c) => c.low);
+  const swingLow10 = recentLows.length ? Math.min(...recentLows) : lastCandle?.low ?? 0;
+  const recentHighs = asOfCandles.slice(-10).map((c) => c.high);
+  const swingHigh10 = recentHighs.length ? Math.max(...recentHighs) : lastCandle?.high ?? 0;
+  const entryRef = lastCandle?.close ?? 0;
+  const plan = entryRef > 0 && atr14 > 0 ? (() => {
+    const stop = Math.max(swingLow10, entryRef - 1.5 * atr14);
+    const t1 = entryRef + 2 * atr14;
+    const t2 = entryRef + 3.5 * atr14;
+    const rr = stop < entryRef ? (t1 - entryRef) / (entryRef - stop) : null;
+    return { entry: entryRef, stop, t1, t2, rr, atr14Pct: atr14 / entryRef, swingHigh10 };
+  })() : null;
+
   return {
     ...score,
     sector: emitenInfo?.sector ?? score.sector ?? null,
@@ -132,6 +155,7 @@ async function enrich(ticker, date) {
     turnover: score.avgValueTraded20 ?? 0,
     lastValueTraded,
     rvol,
+    plan,
     velocityOk: passesVelocity(asOfCandles),
     reason: null,
     _chart: datedChart,
@@ -171,6 +195,15 @@ function serialize(d, category) {
     velocityOk: !!d.velocityOk,
     rvol: round(d.rvol, 2),
     lastValueTraded: typeof d.lastValueTraded === 'number' ? Math.round(d.lastValueTraded) : null,
+    plan: d.plan ? {
+      entry: Math.round(d.plan.entry),
+      stop: Math.round(d.plan.stop),
+      t1: Math.round(d.plan.t1),
+      t2: Math.round(d.plan.t2),
+      rr: d.plan.rr != null ? Math.round(d.plan.rr * 10) / 10 : null,
+      atr14Pct: Math.round(d.plan.atr14Pct * 1000) / 1000,
+      swingHigh10: Math.round(d.plan.swingHigh10),
+    } : null,
     reason: (() => {
       try {
         return category.describe(d);

@@ -516,16 +516,6 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
   const range = screeningRangeForDate(date);
   const category = getCategory(filters.category);
 
-  // Lightweight stage timing — measure each phase before optimizing. Each lap
-  // logs the duration of the stage just finished; `total` closes the run.
-  const tStart = Date.now();
-  let tMark = tStart;
-  const lap = (stage) => {
-    const now = Date.now();
-    console.log(`[screening:timing] ${stage}: ${now - tMark}ms`);
-    tMark = now;
-  };
-
   try {
     // Tier 1 — live universe scan, ranked per category.
     const { shortlist, universeSize, candidateCount } = await scanUniverse(date, {
@@ -536,8 +526,6 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       boardLevel: filters.boardLevel ?? '',
       range,
     });
-    lap('tier1-scan');
-
     if (shortlist.length === 0) {
       return {
         date,
@@ -557,7 +545,6 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
     const results = await mapLimit(shortlist, ENRICH_CONCURRENCY, (c) =>
       enrichCandidate(c, date, range, category, ctx)
     );
-    lap(`tier2-enrich (${shortlist.length} names)`);
     const usable = results.filter((r) => r && r.data).map((r) => r.data);
     // Re-score inputs (chart + fundamentals + as-of session) per ticker, used by
     // the bandarmology pass below to recompute only the surfaced names' scores.
@@ -618,7 +605,6 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
         console.warn('AI review failed, using deterministic ranking:', e);
       }
     }
-    lap('ai-judge');
     if (aiResult?.candidates) {
       // Apply AI ranking adjustments
       const rankedWithAdjustments = ordered.map((candidate, originalIndex) => {
@@ -665,9 +651,6 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
         bandarSessions: bandarSessionsFor(rc),
       };
     });
-    lap('finalize (bandar lazy)');
-
-    console.log(`[screening:timing] total: ${Date.now() - tStart}ms`);
     return {
       date,
       candidates: finalCandidates,
