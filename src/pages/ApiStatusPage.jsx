@@ -113,7 +113,7 @@ function ServicePanel({ title, subtitle, snapshot, statusLabel, t }) {
         </div>
       }
     >
-      <p className="-mt-2 mb-3 font-mono text-xs text-ink-muted">{subtitle}</p>
+      <p className="-mt-1 mb-3 font-mono text-xs text-ink-muted">{subtitle}</p>
       <div className="grid gap-x-12 md:grid-cols-2">
         <Row
           label={t('Configuration', 'Konfigurasi')}
@@ -230,7 +230,7 @@ export default function ApiStatusPage() {
           title={t('Session activity', 'Aktivitas sesi')}
           aside={<QuietButton onClick={clearAllLogs}>{t('Clear log', 'Bersihkan log')}</QuietButton>}
         >
-          <p className="-mt-2 mb-4 font-mono text-xs text-ink-muted">
+          <p className="-mt-1 mb-4 font-mono text-xs text-ink-muted">
             {t('Last checked', 'Terakhir diperiksa')} {formatTime(lastCheckedAt, t('Never', 'Belum pernah'))}
           </p>
 

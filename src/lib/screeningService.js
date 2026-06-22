@@ -7,7 +7,7 @@ import { buildScreeningScore, formatRpCompact, formatPct } from './analysis.js';
 import { fetchBandarmology, fetchBandarmologyRange } from './idxApi.js';
 import { findEmiten, boardRisk } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
-import { getCategory, matchesCategory, capTierBounds } from './screeningCategories.js';
+import { getCategory, matchesCategory, qualifiesByChecks, capTierBounds } from './screeningCategories.js';
 import { finishAIActivity, setAIConfigured, startAIActivity } from './aiSession.js';
 import { rejectWithReason } from './claudeAI';
 
@@ -189,7 +189,7 @@ Return ONLY the JSON structure specified in the system prompt.
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4000,
+          max_tokens: 1024, // ~10 one-line reasons + adjustments; caps generation time
           system: systemPrompt,
           messages: [{
             role: 'user',
@@ -496,6 +496,16 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
   const range = screeningRangeForDate(date);
   const category = getCategory(filters.category);
 
+  // Lightweight stage timing — measure each phase before optimizing. Each lap
+  // logs the duration of the stage just finished; `total` closes the run.
+  const tStart = Date.now();
+  let tMark = tStart;
+  const lap = (stage) => {
+    const now = Date.now();
+    console.log(`[screening:timing] ${stage}: ${now - tMark}ms`);
+    tMark = now;
+  };
+
   try {
     // Tier 1 — live universe scan, ranked per category.
     const { shortlist, universeSize, candidateCount } = await scanUniverse(date, {
@@ -506,6 +516,7 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
       boardLevel: filters.boardLevel ?? '',
       range,
     });
+    lap('tier1-scan');
 
     if (shortlist.length === 0) {
       return {
@@ -526,6 +537,7 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
     const results = await mapLimit(shortlist, ENRICH_CONCURRENCY, (c) =>
       enrichCandidate(c, date, range, category, ctx)
     );
+    lap(`tier2-enrich (${shortlist.length} names)`);
     const usable = results.filter((r) => r && r.data).map((r) => r.data);
     // Re-score inputs (chart + fundamentals + as-of session) per ticker, used by
     // the bandarmology pass below to recompute only the surfaced names' scores.
@@ -563,11 +575,16 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
     let aiResult = null;
     if (isConfigured()) {
       try {
-        aiResult = await aiJudgeCategory(ordered, category, date);
+        // Only the surfaced top-N is ever displayed, so the judge reviews a small
+        // buffer (top 10) rather than the whole matched list — the dominant cost
+        // is the per-candidate generation, and reordering names below the buffer
+        // is wasted work. The buffer leaves room to promote a name or two.
+        aiResult = await aiJudgeCategory(ordered.slice(0, 10), category, date);
       } catch (e) {
         console.warn('AI review failed, using deterministic ranking:', e);
       }
     }
+    lap('ai-judge');
     if (aiResult?.candidates) {
       // Apply AI ranking adjustments
       const rankedWithAdjustments = ordered.map((candidate, originalIndex) => {
@@ -649,10 +666,12 @@ export const screeningStage1 = async (date, count = 5, filters = {}) => {
         };
       }),
     );
+    lap(`bandar-rescore (top ${finalCandidates.length})`);
     // Bandarmology can shift scores within the surfaced set — re-sort so the
     // displayed order reflects the complete rating.
     finalCandidates.sort((a, b) => b.composite - a.composite);
 
+    console.log(`[screening:timing] total: ${Date.now() - tStart}ms`);
     return {
       date,
       candidates: finalCandidates,
@@ -769,14 +788,18 @@ export const diagnoseStock = async (code, date, filters = {}, recommended = []) 
   // The category's own strategy criteria.
   for (const c of category.criteria(d)) checks.push(c);
 
-  const qualifies = checks.every((c) => c.ok);
+  const qualifies = qualifiesByChecks(checks, category.flexibleMin);
 
   let verdict;
   if (hit) {
     verdict = `${ticker} IS on the list${hit.rank ? ` at #${hit.rank}` : ''}.`;
   } else if (!qualifies) {
-    const failed = checks.filter((c) => !c.ok);
-    verdict = `${ticker} is excluded by the ${category.label} screen — it fails ${failed.length} of ${checks.length} criteria below.`;
+    const failedMandatory = checks.filter((c) => !c.flexible && !c.ok);
+    const flexible = checks.filter((c) => c.flexible);
+    const flexOk = flexible.filter((c) => c.ok).length;
+    verdict = failedMandatory.length
+      ? `${ticker} is excluded by the ${category.label} screen — it fails ${failedMandatory.length} mandatory criteria below.`
+      : `${ticker} is excluded by the ${category.label} screen — it clears only ${flexOk} of ${flexible.length} quality gates (needs ${category.flexibleMin}).`;
   } else {
     // Passed every gate but isn't in the top N — a ranking/shortlist miss.
     const lowest = recommended.length ? recommended[recommended.length - 1] : null;

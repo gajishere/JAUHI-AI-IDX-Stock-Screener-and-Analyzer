@@ -57,8 +57,8 @@ export function Row({ label, value, tone }) {
 
 export function Section({ title, aside, children }) {
   return (
-    <section className="mt-8 border-t border-line pt-5 first:mt-0 first:border-t-0 first:pt-0">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
+    <section className="mt-8 border-t border-line pt-6 first:mt-0 first:border-t-0 first:pt-0">
+      <div className="mb-3 flex items-center justify-between gap-4">
         <h3 className="font-serif text-xl font-medium">{title}</h3>
         {aside}
       </div>
