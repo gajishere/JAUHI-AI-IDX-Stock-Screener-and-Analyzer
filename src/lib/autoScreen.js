@@ -12,15 +12,27 @@
 // Pipeline:
 //   1. Seed   = live IDX trending movers  ∪  Yahoo momentum universe shortlist
 //   2. Enrich = Yahoo chart per seed → buildScreeningScore (momentum signals)   [free]
-//   3. Gate   = JAUHI (bank / ≥Rp100T) + liquidity floor + RVOL spike +
-//               Momentum criteria + SAHAM LAMBAT velocity
-//               Liquidity gates (tradability, not prestige):
-//                 • marketCap ≥ Rp 100M  — drops zombie/shell stocks (< Rp 50M)
-//                   while keeping genuinely active small-caps like SDMU
-//                 • turnover today ≥ Rp 10M — minimum real-money flow so a
-//                   Rp 50juta position can realistically enter AND exit
-//                 • RVOL ≥ 2  — today's volume must be ≥ 2× MA20; ensures the
-//                   activity is an anomaly (accumulation / breakout), not noise
+//   3. Gate   = a two-tier relaxation LADDER so the page never goes blank on a
+//               quiet/red day while keeping the strict bar when the market gives
+//               real setups. Tradability ALWAYS holds (no banks, no ≥Rp100T
+//               mega-caps, no sub-Rp100M shells). On top of that:
+//                 • Tier A (strict): turnover today ≥ Rp 10M + RVOL ≥ 2× MA20 +
+//                   a full Momentum match (golden 50/200 stack + volume conf).
+//                 • Tier B (relaxed): used ONLY to backfill when Tier A returns
+//                   fewer than `count` — softer floors (turnover ≥ Rp 5M, RVOL
+//                   ≥ 1.5×) + a DEVELOPING trend (price > MA50, not the full
+//                   stack) + any one strength signal. Early breakouts/reversals
+//                   surface here, clearly marked as the lower-conviction tier.
+//               Cards carry their `tier`; the page badges Tier-B picks.
+//   3c. Tier C (Sentiment Discount) — a SEPARATE, always-on counter-trend track
+//       that runs alongside the momentum ladder (not a relaxation of it). It
+//       surfaces fundamentally sound, liquid blue chips (≥ Rp1T, non-bank) that
+//       are oversold by market sentiment rather than broken: trend still intact
+//       (price ≥ ~MA200), pulled back below MA50, RSI washed out (30–48), and
+//       confirmed by decent fundamentals (ROE > 10%, PER 0–20, PBV < 3, DER <
+//       1.5). On a red IHSG day many quality names qualify; on a strong day the
+//       list is naturally thin or empty (correct — the market isn't discounting).
+//       IHSG's own day change is fetched as context for the section header.
 //   4. Rank   = velocity-first, then composite (the Momentum category's own rank)
 //   5. Live   = for the top `count` finalists only: IDX stock-info (live price/
 //               volume overlay) + as-of-session bandarmology, folded into score   [≤2 IDX req each]
@@ -29,7 +41,7 @@
 // IDX request budget per scan ≈ 1 (movers) + count (stock-info) + count
 // (bandarmology) ≈ 11 at count=5 — inside the BASIC ~1 req/s ceiling.
 
-import { fetchSymbolChart } from './marketData.js';
+import { fetchSymbolChart, fetchFundamentals } from './marketData.js';
 import { buildScreeningScore } from './analysis.js';
 import { fetchMarketMovers, fetchStockInfo, fetchBandarmology } from './idxApi.js';
 import { findEmiten } from './universe.js';
@@ -166,6 +178,25 @@ async function enrich(ticker, date) {
 
 const round = (v, dp = 2) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10 ** dp) / 10 ** dp : v ?? null);
 
+// Relaxed momentum for the ladder's Tier B: a DEVELOPING trend (price above MA50
+// — not the full 50/200 golden stack) plus any one strength signal. Lets early
+// breakouts / reversals backfill empty slots on thin days, clearly marked as the
+// lower-conviction tier rather than leaving the page blank.
+function passesDevelopingMomentum(d) {
+  const s = d.signals ?? {};
+  const developing =
+    !!s.goldenTrend || (s.sma50 != null && d.close != null && d.close > s.sma50);
+  if (!developing) return false;
+  return (
+    (s.volumeRatio != null && s.volumeRatio > 1) ||
+    (s.rsi14 != null && s.rsi14 >= 50 && s.rsi14 <= 80) ||
+    (d.oneMonth != null && d.oneMonth > 0)
+  );
+}
+
+// Strict picks always rank ahead of relaxed backfill.
+const TIER_RANK = { strict: 0, relaxed: 1 };
+
 // Strip the heavy internals and shape a compact, JSON-safe card for the snapshot.
 function serialize(d, category) {
   const b = d.bandarmology;
@@ -193,6 +224,7 @@ function serialize(d, category) {
       goldenTrend: !!s.goldenTrend,
     },
     velocityOk: !!d.velocityOk,
+    tier: d.tier ?? 'strict',
     rvol: round(d.rvol, 2),
     lastValueTraded: typeof d.lastValueTraded === 'number' ? Math.round(d.lastValueTraded) : null,
     plan: d.plan ? {
@@ -233,6 +265,180 @@ function serialize(d, category) {
   };
 }
 
+// ---- Tier C — Sentiment Discount (standing counter-trend track) ----
+
+// Today's IHSG (Jakarta Composite, ^JKSE) day change — context for the discount
+// section header. One Yahoo chart (proxied, cheap). Returns { last, changePct } | null.
+async function fetchIhsgContext(date) {
+  try {
+    const chart = await fetchSymbolChart('^JKSE', '1mo');
+    const candles = (chart?.candles ?? []).filter((c) => c.date <= date);
+    if (candles.length < 2) return null;
+    const last = candles[candles.length - 1];
+    const prev = candles[candles.length - 2];
+    const changePct = prev.close > 0 ? ((last.close - prev.close) / prev.close) * 100 : null;
+    return { last: last.close, changePct };
+  } catch {
+    return null;
+  }
+}
+
+// Discount-flavored trading plan: you're buying weakness, so targets revert
+// toward the mean (MA50) and the pre-selloff swing high — not breakout highs.
+// Reuses the momentum plan's ATR/levels so we never re-walk candles.
+function discountPlanFrom(d) {
+  const p = d.plan;
+  if (!p) return null;
+  const sma50 = d.signals?.sma50 ?? null;
+  const atr = p.atr14Pct * p.entry;
+  const t1 = sma50 != null && sma50 > p.entry ? sma50 : p.entry + 2 * atr; // mean reversion
+  const t2 = Math.max(p.swingHigh10, p.entry + 3.5 * atr); // back toward pre-selloff high
+  const rr = p.stop < p.entry ? (t1 - p.entry) / (p.entry - p.stop) : null;
+  return { entry: p.entry, stop: p.stop, t1, t2, rr, atr14Pct: p.atr14Pct, swingHigh10: p.swingHigh10 };
+}
+
+// Shape a compact, JSON-safe sentiment-discount card for the snapshot.
+function serializeDiscount(d) {
+  const f = d.fundamentals ?? {};
+  const s = d.signals ?? {};
+  const plan = discountPlanFrom(d);
+  return {
+    kind: 'discount',
+    ticker: d.ticker,
+    name: d.name ?? null,
+    sector: d.sector ?? null,
+    board: d.board ?? null,
+    capTier: d.capTier ?? null,
+    marketCap: d.marketCap ?? null,
+    close: d.close ?? null,
+    oneMonth: d.oneMonth ?? null,
+    rsi14: round(s.rsi14, 1),
+    sma50: round(s.sma50, 2),
+    discountPct: d._discountGap != null ? Math.round(d._discountGap * 1000) / 10 : null, // % below MA50
+    rvol: round(d.rvol, 2),
+    lastValueTraded: typeof d.lastValueTraded === 'number' ? Math.round(d.lastValueTraded) : null,
+    fundamentals: {
+      per: round(f.per, 1),
+      pbv: round(f.pbv, 2),
+      roe: round(f.roe, 3),
+      roa: round(f.roa, 3),
+      debtToEquity: round(f.debtToEquity, 2),
+    },
+    plan: plan
+      ? {
+          entry: Math.round(plan.entry),
+          stop: Math.round(plan.stop),
+          t1: Math.round(plan.t1),
+          t2: Math.round(plan.t2),
+          rr: plan.rr != null ? Math.round(plan.rr * 10) / 10 : null,
+          atr14Pct: Math.round(plan.atr14Pct * 1000) / 1000,
+          swingHigh10: Math.round(plan.swingHigh10),
+        }
+      : null,
+    live: d.live
+      ? {
+          last: d.live.last,
+          changePct: d.live.changePct,
+          volume: d.live.volume,
+          value: d.live.value,
+          marketHourStatus: d.live.marketHourStatus,
+        }
+      : null,
+    reason: (() => {
+      const parts = [];
+      if (d._discountGap != null) parts.push(`${(d._discountGap * 100).toFixed(1)}% below MA50`);
+      if (s.rsi14 != null) parts.push(`RSI ${Math.round(s.rsi14)}`);
+      if (f.roe != null) parts.push(`ROE ${(f.roe * 100).toFixed(0)}%`);
+      if (f.per != null && f.per > 0) parts.push(`PER ${f.per.toFixed(1)}×`);
+      return `Sentiment discount — ${parts.join(', ') || 'oversold quality'}`;
+    })(),
+  };
+}
+
+// Tier C screener. Seeds from the non-bank quality universe (≥ Rp1T, size-ranked
+// — the blue-chip scan shape with a Rp1T floor), enriches with charts, gates on
+// "oversold but intact", confirms with fundamentals, ranks by discount depth ×
+// quality, and overlays a live IDX price for the finalists. Returns serialized
+// discount cards (possibly empty — a strong day yields no discounts).
+async function screenSentimentDiscounts(date, count) {
+  const seedCategory = {
+    ...getCategory('bluechip'),
+    id: 'discount-seed',
+    jauhi: true, // non-bank, drop ≥Rp100T mega-caps — consistent with the site's JAUHI identity
+    capFloor: 1e12, // ≥ Rp 1T (quality scale)
+    capCeil: null,
+  };
+  let scan;
+  try {
+    scan = await scanUniverse(date, { count, category: seedCategory, range: RANGE });
+  } catch {
+    return [];
+  }
+  const seed = scan.shortlist.slice(0, 45).map((s) => s.ticker);
+
+  // Enrich (chart + locked score). Fundamentals are fetched later, only for the
+  // technical survivors, to keep the request budget tight.
+  const enriched = (
+    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
+  ).filter(Boolean);
+
+  // Cheap technical gate: liquid + structurally intact + oversold + at a discount.
+  const oversold = enriched.filter((d) => {
+    const s = d.signals ?? {};
+    if (d.marketCap == null || d.marketCap < 1e12) return false; // ≥ Rp1T
+    if (d.lastValueTraded < 1e10) return false; // still tradable today
+    if (s.sma200 == null || d.close == null) return false;
+    if (d.close < s.sma200 * 0.97) return false; // trend NOT broken (falling-knife guard)
+    if (s.sma50 == null || d.close >= s.sma50) return false; // genuinely below the mean = a discount
+    if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > 48) return false; // washed out, not catastrophic
+    return true;
+  });
+  if (oversold.length === 0) return [];
+
+  // Confirm quality with fundamentals (Yahoo, cheap) — survivors only.
+  const withFun = await mapLimit(oversold, ENRICH_CONCURRENCY, async (d) => {
+    let f = null;
+    try {
+      f = await fetchFundamentals(d.ticker);
+    } catch {
+      /* degrade — a name with no fundamentals can't be called "quality" below */
+    }
+    return { ...d, fundamentals: f };
+  });
+  const quality = withFun.filter((d) => {
+    const f = d.fundamentals;
+    if (!f) return false;
+    if (!(f.roe != null && f.roe > 0.1)) return false; // genuinely profitable
+    if (!(f.per != null && f.per > 0 && f.per < 20)) return false; // earning + not pricey
+    if (f.pbv != null && f.pbv > 3) return false; // not richly valued on book
+    if (f.debtToEquity != null && f.debtToEquity > 1.5) return false; // controlled leverage
+    return true;
+  });
+  if (quality.length === 0) return [];
+
+  // Rank: deepest discount among the best quality (below-MA50 gap × ROE).
+  const scored = quality.map((d) => {
+    const gap = (d.signals.sma50 - d.close) / d.close;
+    return { ...d, _discountGap: gap, _discountScore: gap * (d.fundamentals.roe ?? 0) };
+  });
+  scored.sort((a, b) => b._discountScore - a._discountScore);
+  const finalists = scored.slice(0, count);
+
+  // Live IDX price overlay. Skip bandarmology here to stay inside the request
+  // budget — the discount thesis is fundamental, not tape-driven.
+  const withLive = await mapLimit(finalists, LIVE_CONCURRENCY, async (d) => {
+    let live = null;
+    try {
+      live = await fetchStockInfo(d.ticker);
+    } catch {
+      /* best-effort */
+    }
+    return { ...d, live };
+  });
+
+  return withLive.map((d) => serializeDiscount(d));
+}
+
 // Run one auto-screen. `now` lets callers (and tests) pin the clock; otherwise
 // it's the real time, projected to WIB for the date + scan-type labels.
 export async function autoScreen({ count = 5, now = new Date() } = {}) {
@@ -268,25 +474,45 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
   ).filter(Boolean);
 
-  // 3. JAUHI (cheap re-check on the scored data) + liquidity gates + Momentum criteria.
-  const eligible = enriched.filter((d) => {
-    // JAUHI: drop banks and mega-caps (≥ Rp 100T)
+  // 3. Tradability floor (ALWAYS holds), then the relaxation LADDER.
+  // JAUHI + the Rp100M cap floor are non-negotiable — a bank, a ≥Rp100T
+  // mega-cap, or a sub-Rp100M shell must never surface however thin the day.
+  const tradable = enriched.filter((d) => {
     if (category.jauhi && (isBankName(d.name) || (d.marketCap != null && d.marketCap >= 1e14))) return false;
-    // Drop zombie / shell stocks below Rp 100 Miliar market cap.
     // Null cap (missing emiten data) passes through rather than being silently dropped.
     if (d.marketCap != null && d.marketCap < 1e11) return false;
-    // Today's trading value must be ≥ Rp 10 Miliar so a Rp 50juta position can exit.
-    if (d.lastValueTraded < 1e10) return false;
-    // RVOL must be ≥ 2× MA20 — genuine accumulation spike, not ordinary drift.
-    if (d.rvol < 2) return false;
     return true;
   });
-  const matched = eligible.filter((d) => matchesCategory(category, d));
 
-  // 4. Velocity-first ordering, then the category's composite rank.
-  const fast = matched.filter((d) => d.velocityOk).sort(category.rank);
-  const calm = matched.filter((d) => !d.velocityOk).sort(category.rank);
-  const ordered = [...fast, ...calm];
+  // Tier A (strict): a real 2× volume spike + Rp10M turnover + full Momentum match.
+  const strict = tradable.filter(
+    (d) => d.lastValueTraded >= 1e10 && d.rvol >= 2 && matchesCategory(category, d),
+  );
+
+  // Tier B (relaxed): ONLY to backfill when Tier A can't fill `count`. Softer
+  // money/spike floors (Rp5M / 1.5×) + a developing (price > MA50) trend.
+  let pool = strict.map((d) => ({ ...d, tier: 'strict' }));
+  if (pool.length < count) {
+    const strictSet = new Set(strict.map((d) => d.ticker));
+    const relaxed = tradable
+      .filter(
+        (d) =>
+          !strictSet.has(d.ticker) &&
+          d.lastValueTraded >= 5e9 &&
+          d.rvol >= 1.5 &&
+          passesDevelopingMomentum(d),
+      )
+      .map((d) => ({ ...d, tier: 'relaxed' }));
+    pool = [...pool, ...relaxed];
+  }
+
+  // 4. Strict always outranks relaxed; within a tier, velocity-first then the
+  // category's composite rank.
+  const ordered = pool.sort((a, b) => {
+    if (TIER_RANK[a.tier] !== TIER_RANK[b.tier]) return TIER_RANK[a.tier] - TIER_RANK[b.tier];
+    if (a.velocityOk !== b.velocityOk) return a.velocityOk ? -1 : 1;
+    return category.rank(a, b);
+  });
 
   // 5. Finalists only (top `count`): live IDX overlay + as-of bandarmology,
   // folded back into the locked screening score.
@@ -329,9 +555,21 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     return { ...folded, bandarmology: bandar && !bandar.empty ? bandar : null, live };
   });
 
-  // Bandarmology can nudge scores within the surfaced set — re-sort.
-  withLive.sort((a, b) => (b.composite ?? 0) - (a.composite ?? 0));
+  // Bandarmology can nudge scores within the surfaced set — re-sort, but keep
+  // strict picks ahead of any relaxed backfill.
+  withLive.sort((a, b) => {
+    if (TIER_RANK[a.tier] !== TIER_RANK[b.tier]) return TIER_RANK[a.tier] - TIER_RANK[b.tier];
+    return (b.composite ?? 0) - (a.composite ?? 0);
+  });
   const candidates = withLive.map((d) => serialize(d, category));
+  const relaxedShown = candidates.filter((c) => c.tier === 'relaxed').length;
+
+  // Tier C (Sentiment Discount) + IHSG context — the standing counter-trend
+  // track, run after the momentum overlay so their IDX calls don't interleave.
+  const [ihsg, discounts] = await Promise.all([
+    fetchIhsgContext(date),
+    screenSentimentDiscounts(date, count),
+  ]);
 
   const slot = owningScanSlot(now);
   return {
@@ -345,9 +583,16 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     category: 'momentum',
     count: candidates.length,
     candidates,
+    ihsg,
+    discounts,
     summary:
       `Seeded ${trendingCodes.length} live movers + ${scanCodes.length} scan names ` +
-      `(${seed.length} unique) → ${enriched.length} scored → ${eligible.length} passed liquidity gates → ` +
-      `${matched.length} momentum matches → top ${candidates.length}.`,
+      `(${seed.length} unique) → ${enriched.length} scored → ${tradable.length} tradable → ` +
+      `${strict.length} strict` +
+      (relaxedShown > 0 ? ` + ${relaxedShown} relaxed backfill` : '') +
+      ` → top ${candidates.length}` +
+      `; ${discounts.length} sentiment discount${discounts.length === 1 ? '' : 's'}` +
+      (ihsg?.changePct != null ? ` (IHSG ${ihsg.changePct >= 0 ? '+' : ''}${ihsg.changePct.toFixed(2)}%)` : '') +
+      `.`,
   };
 }

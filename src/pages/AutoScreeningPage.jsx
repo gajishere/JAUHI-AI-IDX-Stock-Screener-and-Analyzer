@@ -1,15 +1,17 @@
 // Live Auto-Screening — the website's landing page.
 //
-// Reads the latest server-side momentum snapshot and renders the top 5 movers
-// as rank-railed cards, each expandable into a full live trading plan
-// (ATR-based entry / stop / T1 / T2 bar, R:R, RVOL, today's turnover).
+// Redesigned to read like the rest of the desk: a quiet reading-room list, not a
+// wall of frosted tiles. Candidates and discounts are opaque dotted-leader rows
+// inside a single raised panel; signals are inline mono figures, not stacked
+// chips; color appears only as a verdict. Liquid glass is concentrated into ONE
+// deliberate moment — the floating market strip — per the glass-on-chrome-only
+// rule. Each row expands into an on-brand dotted-leader trading plan.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../lib/i18n';
 import { useSound } from '../lib/sound';
-import { Pill, RatingFigure } from '../components/report';
-import { formatPct } from '../lib/analysis';
+import { Row, RatingFigure } from '../components/report';
 import { marketStatus, nextScanSlot, wibNow } from '../lib/marketHours';
 
 const POLL_MS = 15 * 60_000;
@@ -18,7 +20,7 @@ const POLL_MS = 15 * 60_000;
 const formatRp = (v) => (v == null ? '—' : `Rp ${Math.round(v).toLocaleString('id-ID')}`);
 const signedPct = (p) => (p == null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(2)}%`);
 
-// Compact IDR for large values (turnover, market cap)
+// Compact IDR for large values (turnover, market cap).
 const fmtMilliar = (v) => {
   if (v == null || !Number.isFinite(v) || v === 0) return '—';
   if (v >= 1e12) return `Rp ${(v / 1e12).toFixed(1)} T`;
@@ -39,7 +41,7 @@ const PHASE = {
 function scanTypeLabel(t, type) {
   switch (type) {
     case 'pre-market': return t('Pre-market scan', 'Pemindaian pra-pembukaan');
-    case 'pre-close':  return t('Pre-close — to hold overnight', 'Jelang penutupan — untuk ditahan');
+    case 'pre-close':  return t('Pre-close list', 'Daftar jelang penutupan');
     case 'intraday':   return t('Live intraday scan', 'Pemindaian intraday langsung');
     default:           return t('Manual scan', 'Pemindaian manual');
   }
@@ -55,7 +57,7 @@ function planHorizon(t, type) {
 }
 
 const accTone = (a) =>
-  a == null ? 'muted' : /big acc|^acc/i.test(a) ? 'pos' : /dist/i.test(a) ? 'neg' : 'warn';
+  a == null ? 'text-ink-muted' : /big acc|^acc/i.test(a) ? 'text-pos' : /dist/i.test(a) ? 'text-neg' : 'text-warn';
 
 function fmtCountdown(mins) {
   if (mins == null || mins < 0) return '—';
@@ -65,8 +67,10 @@ function fmtCountdown(mins) {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-// ---- StatusBar ----
-function StatusBar({ snapshot }) {
+// ---- MarketStrip ----
+// The page's single liquid-glass surface: floating chrome reporting market phase,
+// Jakarta time, and the next scan. Everything else on the page stays opaque.
+function MarketStrip({ snapshot }) {
   const t = useT();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -74,16 +78,15 @@ function StatusBar({ snapshot }) {
     return () => clearInterval(id);
   }, []);
 
-  const phaseKey = marketStatus(now);
-  const phase = PHASE[phaseKey] ?? PHASE.closed;
+  const phase = PHASE[marketStatus(now)] ?? PHASE.closed;
   const wib = wibNow(now);
   const next = nextScanSlot(now);
   const dotClass =
     phase.tone === 'pos' ? 'bg-pos' : phase.tone === 'warn' ? 'bg-warn' : 'bg-ink-muted/60';
 
   return (
-    <div className="glass-surface rounded-2xl p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+    <div className="glass-surface rounded-2xl px-5 py-4 sm:px-6 sm:py-5">
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
         <div className="flex items-center gap-3">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
             {phase.live && (
@@ -92,419 +95,383 @@ function StatusBar({ snapshot }) {
             <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${dotClass}`} />
           </span>
           <div>
-            <p className="font-mono text-[11px] leading-tight text-brand-strong">
-              {t('idx market', 'pasar idx')}
-            </p>
+            <p className="font-mono text-[11px] leading-tight text-ink-muted">{t('idx market', 'pasar idx')}</p>
             <p className="font-serif text-lg font-medium leading-tight">{t(phase.en, phase.id)}</p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:gap-8">
-          <div className="text-right sm:text-left">
-            <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Jakarta time', 'Waktu Jakarta')}</p>
-            <p className="font-mono text-lg tabular-nums">
+        <div className="flex items-center gap-6 font-mono tabular-nums sm:ml-auto">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-ink-muted">{t('Jakarta', 'Jakarta')}</p>
+            <p className="text-base leading-tight">
               {wib.hm} <span className="text-xs text-ink-muted">WIB</span>
             </p>
           </div>
-          <div className="relative text-right before:absolute before:-left-4 before:top-1/2 before:hidden before:h-5 before:w-px before:-translate-y-1/2 before:bg-line sm:before:block">
-            <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('Next scan', 'Pemindaian berikutnya')}</p>
-            <p className="font-mono text-lg tabular-nums">
+          <div className="border-l border-line pl-6">
+            <p className="text-[11px] uppercase tracking-wide text-ink-muted">{t('Next scan', 'Pemindaian berikutnya')}</p>
+            <p className="text-base leading-tight">
               {next.slot} <span className="text-xs text-ink-muted">· {fmtCountdown(next.minutesUntil)}</span>
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted">
-        {snapshot?.generatedAt ? (
-          <>
-            <Pill tone={snapshot.scanType === 'pre-close' ? 'brand' : 'info'}>
-              {scanTypeLabel(t, snapshot.scanType)}
-            </Pill>
-            <span className="font-mono tabular-nums">
-              {t('Updated', 'Diperbarui')}{' '}
-              {new Date(snapshot.generatedAt).toLocaleString('id-ID', {
-                hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short',
-                timeZone: 'Asia/Jakarta',
-              })}{' '}
-              WIB
-            </span>
-          </>
-        ) : (
-          <span>{t('Awaiting the first scan of the session.', 'Menunggu pemindaian pertama sesi ini.')}</span>
-        )}
-      </div>
+      {snapshot?.generatedAt && (
+        <p className="mt-3 border-t border-line/70 pt-2.5 font-mono text-[11px] text-ink-muted">
+          {scanTypeLabel(t, snapshot.scanType)} · {t('updated', 'diperbarui')}{' '}
+          {new Date(snapshot.generatedAt).toLocaleString('id-ID', {
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short',
+            timeZone: 'Asia/Jakarta',
+          })}{' '}
+          WIB
+        </p>
+      )}
     </div>
   );
 }
 
-// ---- TradingPlanPanel ----
-// Visual ATR-based entry / stop / target bar + stats row.
-function TradingPlanPanel({ plan, live, rvol, lastValueTraded, scanType }) {
+// ---- PlanRows ----
+// The trading plan as the report's typographic spine: a slim level track for
+// orientation, then dotted-leader Rows (Entry / Cut loss / Targets), a compact
+// stat line, and a one-line caveat. Shared by movers and discounts.
+function PlanRows({ plan, live, rvol, lastValueTraded, scanType, kind }) {
   const t = useT();
-  if (!plan) return null;
-
-  const livePrice = live?.last ?? null;
   const { entry, stop, t1, t2, rr, atr14Pct } = plan;
 
-  // Proportional bar: stop=left edge, t2=right edge.
-  const lo = stop * 0.993;
-  const hi = t2 * 1.007;
-  const span = hi - lo;
+  const lo = stop * 0.997;
+  const hi = t2 * 1.003;
+  const span = hi - lo || 1;
   const pos = (v) => Math.max(0, Math.min(100, ((v - lo) / span) * 100));
-
-  const stopPos  = pos(stop);
-  const entryPos = pos(entry);
-  const t1Pos    = pos(t1);
-  const t2Pos    = pos(t2);
-  const livePos  = livePrice != null ? pos(livePrice) : null;
-
-  const upFromEntry = (v) => entry > 0 ? ((v - entry) / entry * 100) : 0;
-  const dnFromEntry = (v) => entry > 0 ? ((entry - v) / entry * 100) : 0;
-
-  const rvolClass = rvol >= 5 ? 'text-pos' : rvol >= 3 ? 'text-brand-strong' : 'text-ink-muted';
-
-  // Rough position size assuming 2% portfolio risk
+  const livePrice = live?.last ?? null;
+  const up = (v) => (entry > 0 ? ((v - entry) / entry) * 100 : 0);
+  const dn = (v) => (entry > 0 ? ((entry - v) / entry) * 100 : 0);
   const riskPct = entry > stop ? (entry - stop) / entry : null;
-  const posSizePct = riskPct ? Math.min(30, Math.round((0.02 / riskPct) * 100)) : null;
+  const posSize = riskPct ? Math.min(30, Math.round((0.02 / riskPct) * 100)) : null;
+  const livePos = livePrice != null ? pos(livePrice) : null;
+
+  const stat = (label, value) => (
+    <span>
+      {label} <span className="font-semibold text-ink">{value}</span>
+    </span>
+  );
 
   return (
-    <div className="px-5 pb-5 pt-1">
-      {/* Bar + labels — mt-8 gives the upward-protruding dot markers (9px) breathing room */}
-      <div className="relative mt-8">
-        {/* Track */}
-        <div className="relative h-[5px] w-full overflow-hidden rounded-full" style={{ background: 'var(--c-line)' }}>
-          {/* Stop → Entry: danger zone */}
-          <div
-            className="absolute top-0 h-full"
-            style={{
-              left: `${stopPos}%`,
-              width: `${Math.max(0, entryPos - stopPos)}%`,
-              background: 'color-mix(in srgb, var(--c-neg) 45%, transparent)',
-            }}
-          />
-          {/* Entry → T1: first target zone */}
-          <div
-            className="absolute top-0 h-full"
-            style={{
-              left: `${entryPos}%`,
-              width: `${Math.max(0, t1Pos - entryPos)}%`,
-              background: 'color-mix(in srgb, var(--c-brand) 35%, transparent)',
-            }}
-          />
-          {/* T1 → T2: extended zone */}
-          <div
-            className="absolute top-0 h-full"
-            style={{
-              left: `${t1Pos}%`,
-              width: `${Math.max(0, t2Pos - t1Pos)}%`,
-              background: 'color-mix(in srgb, var(--c-pos) 45%, transparent)',
-            }}
-          />
-        </div>
-
-        {/* Dot markers (positioned with translateX centering, clamped) */}
-        {/* STOP */}
-        <div
-          className="absolute -top-[7px]"
-          style={{ left: `clamp(6px, ${stopPos}%, calc(100% - 6px))`, transform: 'translateX(-50%)' }}
-        >
-          <div className="h-3.5 w-3.5 rounded-full border-2"
-            style={{ background: 'var(--c-neg)', borderColor: 'var(--c-paper)' }} />
-        </div>
-        {/* ENTRY */}
-        <div
-          className="absolute -top-[9px]"
-          style={{ left: `clamp(8px, ${entryPos}%, calc(100% - 8px))`, transform: 'translateX(-50%)' }}
-        >
-          <div className="h-[18px] w-[18px] rounded-full border-2"
-            style={{ background: 'var(--c-brand)', borderColor: 'var(--c-paper)' }} />
-        </div>
-        {/* LIVE price dot (dashed ring, if meaningfully different from entry) */}
-        {livePos != null && Math.abs(livePos - entryPos) > 2 && (
-          <div
-            className="absolute -top-[7px] animate-pulse motion-reduce:animate-none"
-            style={{ left: `clamp(6px, ${livePos}%, calc(100% - 6px))`, transform: 'translateX(-50%)' }}
-          >
-            <div className="h-3.5 w-3.5 rounded-full border-2 border-dashed"
-              style={{ borderColor: 'var(--c-brand-strong)', background: 'transparent' }} />
-          </div>
+    <div className="mt-3 rounded-xl bg-well/60 px-4 py-3.5">
+      {/* slim level track — quiet orientation, no protruding markers */}
+      <div aria-hidden="true" className="relative mb-3.5 h-1 w-full overflow-hidden rounded-full bg-line">
+        <div className="absolute top-0 h-full" style={{ left: `${pos(stop)}%`, width: `${Math.max(0, pos(entry) - pos(stop))}%`, background: 'color-mix(in srgb, var(--c-neg) 32%, transparent)' }} />
+        <div className="absolute top-0 h-full" style={{ left: `${pos(entry)}%`, width: `${Math.max(0, pos(t1) - pos(entry))}%`, background: 'color-mix(in srgb, var(--c-brand) 28%, transparent)' }} />
+        <div className="absolute top-0 h-full" style={{ left: `${pos(t1)}%`, width: `${Math.max(0, pos(t2) - pos(t1))}%`, background: 'color-mix(in srgb, var(--c-pos) 32%, transparent)' }} />
+        {livePos != null && Math.abs(livePos - pos(entry)) > 2 && (
+          <div className="absolute top-0 h-full w-px bg-brand-strong" style={{ left: `clamp(0px, ${livePos}%, calc(100% - 1px))` }} />
         )}
-        {/* T1 */}
-        <div
-          className="absolute -top-[7px]"
-          style={{ left: `clamp(6px, ${t1Pos}%, calc(100% - 6px))`, transform: 'translateX(-50%)' }}
-        >
-          <div className="h-3.5 w-3.5 rounded-full border-2"
-            style={{ background: 'var(--c-pos)', borderColor: 'var(--c-paper)' }} />
-        </div>
-        {/* T2 */}
-        <div
-          className="absolute -top-[7px]"
-          style={{ left: `clamp(6px, ${t2Pos}%, calc(100% - 6px))`, transform: 'translateX(-50%)' }}
-        >
-          <div className="h-3.5 w-3.5 rounded-full border-2"
-            style={{ background: 'transparent', borderColor: 'var(--c-pos)' }} />
-        </div>
       </div>
 
-      {/* Price labels: 2-col on mobile (STOP|ENTRY then T1|T2), 4-col on sm+ */}
-      <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 text-center sm:grid-cols-4 sm:gap-x-2 sm:gap-y-0">
-        {/* STOP */}
-        <div className="flex flex-col items-center">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--c-neg)' }}>
-            {t('STOP', 'CUT LOSS')}
-          </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold tabular-nums" style={{ color: 'var(--c-neg)' }}>
-            {formatRp(stop)}
-          </span>
-          <span className="font-mono text-[9px] tabular-nums" style={{ color: 'color-mix(in srgb, var(--c-neg) 70%, transparent)' }}>
-            −{dnFromEntry(stop).toFixed(1)}%
-          </span>
-        </div>
+      <Row label={t('Entry', 'Masuk')} value={livePrice && livePrice !== entry ? (<>{formatRp(entry)} <span className="text-ink-muted">· live {formatRp(livePrice)}</span></>) : formatRp(entry)} />
+      <Row label={t('Cut loss', 'Cut loss')} tone="text-neg" value={<>{formatRp(stop)} <span className="text-ink-muted">−{dn(stop).toFixed(1)}%</span></>} />
+      <Row label={t('Target 1', 'Target 1')} tone="text-pos" value={<>{formatRp(t1)} <span className="text-ink-muted">+{up(t1).toFixed(1)}%</span></>} />
+      <Row label={t('Target 2', 'Target 2')} tone="text-pos" value={<>{formatRp(t2)} <span className="text-ink-muted">+{up(t2).toFixed(1)}%</span></>} />
 
-        {/* ENTRY */}
-        <div className="flex flex-col items-center">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-            {t('ENTRY', 'MASUK')}
-          </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold tabular-nums text-ink">
-            {formatRp(entry)}
-          </span>
-          {livePrice && livePrice !== entry ? (
-            <span className="font-mono text-[9px] tabular-nums" style={{ color: 'var(--c-brand-strong)' }}>
-              live {formatRp(livePrice)}
-            </span>
-          ) : (
-            <span className="font-mono text-[9px] text-ink-muted">{t('ref', 'ref')}</span>
-          )}
-        </div>
-
-        {/* T1 */}
-        <div className="flex flex-col items-center">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--c-pos)' }}>
-            T1
-          </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold tabular-nums" style={{ color: 'var(--c-pos)' }}>
-            {formatRp(t1)}
-          </span>
-          <span className="font-mono text-[9px] tabular-nums" style={{ color: 'color-mix(in srgb, var(--c-pos) 70%, transparent)' }}>
-            +{upFromEntry(t1).toFixed(1)}%
-          </span>
-        </div>
-
-        {/* T2 */}
-        <div className="flex flex-col items-center">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--c-pos)' }}>
-            T2
-          </span>
-          <span className="mt-0.5 font-mono text-xs font-semibold tabular-nums" style={{ color: 'var(--c-pos)' }}>
-            {formatRp(t2)}
-          </span>
-          <span className="font-mono text-[9px] tabular-nums" style={{ color: 'color-mix(in srgb, var(--c-pos) 70%, transparent)' }}>
-            +{upFromEntry(t2).toFixed(1)}%
-          </span>
-        </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2.5 font-mono text-[11px] text-ink-muted">
+        {rr != null && stat('R:R', `${rr.toFixed(1)}×`)}
+        {rvol != null && rvol > 0 && stat('RVOL', `${rvol.toFixed(1)}×`)}
+        {lastValueTraded > 0 && stat(t('Turnover', 'Nilai'), fmtMilliar(lastValueTraded))}
+        {atr14Pct > 0 && stat('ATR', `${(atr14Pct * 100).toFixed(1)}%`)}
+        {posSize != null && stat(t('Size', 'Posisi'), `~${posSize}%`)}
+        <span className="ml-auto uppercase tracking-wide">{planHorizon(t, scanType)}</span>
       </div>
 
-      {/* Stats row */}
-      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line pt-3">
-        {rr != null && (
-          <span className="font-mono text-[11px]">
-            <span className="text-ink-muted">{t('R:R', 'R:R')} </span>
-            <span className="font-semibold text-brand-strong">{rr.toFixed(1)}×</span>
-          </span>
-        )}
-        {rvol != null && rvol > 0 && (
-          <span className={`font-mono text-[11px] ${rvolClass}`}>
-            <span className="text-ink-muted">RVOL </span>
-            <span className="font-semibold">{rvol.toFixed(1)}×</span>
-          </span>
-        )}
-        {lastValueTraded > 0 && (
-          <span className="font-mono text-[11px]">
-            <span className="text-ink-muted">{t('Vol', 'Vol')} </span>
-            <span className="font-semibold text-ink">{fmtMilliar(lastValueTraded)}</span>
-          </span>
-        )}
-        {atr14Pct > 0 && (
-          <span className="font-mono text-[11px]">
-            <span className="text-ink-muted">ATR </span>
-            <span className="font-semibold text-ink">{(atr14Pct * 100).toFixed(1)}%</span>
-          </span>
-        )}
-        {posSizePct != null && (
-          <span className="font-mono text-[11px] text-ink-muted">
-            {t('Pos', 'Pos')} <span className="font-semibold text-ink">~{posSizePct}%</span>{' '}
-            <span className="text-[9px]">{t('(2% risk)', '(risiko 2%)')}</span>
-          </span>
-        )}
-        <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.12em] text-ink-muted">
-          {planHorizon(t, scanType)}
-        </span>
-      </div>
-
-      {/* Disclaimer */}
-      <p className="mt-3 font-mono text-[9px] leading-relaxed text-ink-muted">
-        {t(
-          'ATR-based plan from last close. Not investment advice — adjust for live price.',
-          'Rencana berbasis ATR dari harga penutupan terakhir. Bukan nasihat investasi — sesuaikan dengan harga live.',
-        )}
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
+        {kind === 'discount'
+          ? t(
+              'Target reverts to MA50. Counter-trend — size down. Not investment advice.',
+              'Target kembali ke MA50. Lawan arah — perkecil posisi. Bukan nasihat investasi.',
+            )
+          : t(
+              'ATR plan from last close. Not investment advice — adjust to live price.',
+              'Rencana ATR dari penutupan terakhir. Bukan nasihat investasi — sesuaikan dengan harga live.',
+            )}
       </p>
     </div>
   );
 }
 
-// ---- CandidateCard ----
-function CandidateCard({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
+// ---- PlanDisclosure ----
+// The slim toggle + the expanded PlanRows. Sits inside a row, below its link.
+function PlanDisclosure({ id, label, plan, live, rvol, lastValueTraded, scanType, kind, expanded, onToggle }) {
+  const t = useT();
+  if (!plan) return null;
+  return (
+    <div className="mt-3 border-t border-line pt-1">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left"
+      >
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-strong">{label}</span>
+          {!expanded && plan.rr != null && (
+            <span className="font-mono text-[11px] text-ink-muted">
+              R:R <span className="font-semibold text-ink">{plan.rr.toFixed(1)}×</span>
+            </span>
+          )}
+          {!expanded && (
+            <>
+              <span className="hidden font-mono text-[11px] text-ink-muted sm:inline">
+                {t('Entry', 'Masuk')} <span className="font-semibold text-ink">{formatRp(plan.entry)}</span>
+              </span>
+              <span className="hidden font-mono text-[11px] text-ink-muted sm:inline">
+                CL <span className="font-semibold text-neg">{formatRp(plan.stop)}</span>
+              </span>
+            </>
+          )}
+        </span>
+        <span
+          className="shrink-0 font-mono text-[13px] text-ink-muted transition-transform duration-200 motion-reduce:transition-none"
+          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+      {expanded && (
+        <PlanRows plan={plan} live={live} rvol={rvol} lastValueTraded={lastValueTraded} scanType={scanType} kind={kind} />
+      )}
+    </div>
+  );
+}
+
+// A small right-chevron that nudges on row hover — the "opens full analysis" cue.
+function RowArrow() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 self-center text-ink-muted/45 transition-transform duration-200 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-x-0.5 group-hover:text-ink-muted motion-reduce:transition-none"
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+// ---- MoverRow (momentum A/B) ----
+function MoverRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
   const t = useT();
   const s = c.signals ?? {};
   const bandar = c.bandarmology;
-  const plan = c.plan ?? null;
-  const liveUp   = c.live?.changePct != null && c.live.changePct > 0;
+  const liveUp = c.live?.changePct != null && c.live.changePct > 0;
   const liveDown = c.live?.changePct != null && c.live.changePct < 0;
   const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
   const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=buy&autorun=1`;
 
-  const rvolTone = c.rvol >= 5 ? 'pos' : c.rvol >= 3 ? 'brand' : 'info';
+  // Signal as one quiet inline line — numbers are the content, not chips.
+  const signals = [];
+  if (s.rsi14 != null) signals.push(`RSI ${Math.round(s.rsi14)}`);
+  if (c.rvol != null && c.rvol > 0) signals.push(`vol ${c.rvol.toFixed(1)}×`);
+  if (s.goldenTrend) signals.push(t('uptrend', 'uptrend'));
+  if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
 
   return (
-    <article
-      className="result-row-enter glass-card glass-lift overflow-hidden rounded-2xl motion-reduce:translate-y-0 motion-reduce:transition-none"
-      style={{ '--i': Math.min(index, 9) }}
-    >
-      {/* Top section — the whole row is the deep-analysis link */}
-      <Link to={href} className="tactile-soft group flex outline-none focus-visible:outline-none">
-        {/* rank rail */}
-        <div className="flex w-12 shrink-0 flex-col items-center justify-center border-r border-line bg-white/10 py-5 backdrop-blur-sm dark:bg-white/5 sm:w-16">
-          <span className="font-serif text-2xl font-medium leading-none text-ink sm:text-3xl">{rank}</span>
-        </div>
+    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
+        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
 
-        <div className="min-w-0 flex-1 p-5">
-          {/* head: ticker / name + score */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-base font-semibold tracking-tight text-ink">{c.ticker}</span>
-                {c.board === 'Pemantauan Khusus' && (
-                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
-                )}
-              </div>
-              <p className="mt-0.5 truncate text-xs text-ink-muted" title={c.name}>
-                {c.name}
-                {c.capTier && <span> · {c.capTier}</span>}
-                {c.sector && <span> · {c.sector}</span>}
-              </p>
-            </div>
-            <div className="shrink-0 text-right">
-              <div className="flex items-baseline justify-end gap-1.5">
-                <span className="font-mono text-xl font-semibold tabular-nums">
-                  {c.composite != null ? c.composite.toFixed(1) : '—'}
-                </span>
-                <RatingFigure rating={c.overallRating} className="text-base" />
-              </div>
-              <p className="font-mono text-[11px] uppercase tracking-wide text-ink-muted">{t('momentum', 'momentum')}</p>
-            </div>
-          </div>
-
-          {/* live quote */}
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="font-mono text-lg tabular-nums text-ink sm:text-xl">
-              {formatRp(c.live?.last ?? c.close)}
-            </span>
-            {c.live?.changePct != null && (
-              <span className={`font-mono text-sm tabular-nums ${changeTone}`}>
-                {signedPct(c.live.changePct)}
-                <span className="ml-1 text-ink-muted">{t('today', 'hari ini')}</span>
-              </span>
-            )}
-            {c.oneMonth != null && (
-              <span className={`font-mono text-sm tabular-nums ${c.oneMonth > 0 ? 'text-pos' : c.oneMonth < 0 ? 'text-neg' : 'text-ink-muted'}`}>
-                {formatPct(c.oneMonth)}
-                <span className="ml-1 text-ink-muted">· 1M</span>
-              </span>
-            )}
-          </div>
-
-          {/* signal chips — golden cross / RSI / RVOL / vol / bandar */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {s.goldenTrend && <Pill tone="pos">{t('Golden cross', 'Golden cross')}</Pill>}
-            {s.rsi14 != null && <Pill tone="info">RSI {Math.round(s.rsi14)}</Pill>}
-            {c.rvol != null && c.rvol > 0 && (
-              <Pill tone={rvolTone}>RVOL {c.rvol.toFixed(1)}×</Pill>
-            )}
-            {c.lastValueTraded > 0 && (
-              <Pill tone="muted">Vol {fmtMilliar(c.lastValueTraded)}</Pill>
-            )}
-            {c.velocityOk && <Pill tone="brand">{t('Active tape', 'Tape aktif')}</Pill>}
-            {bandar?.accdist && <Pill tone={accTone(bandar.accdist)}>{`Bandar · ${bandar.accdist}`}</Pill>}
-          </div>
-
-          {/* thesis + deep-analysis link */}
-          <div className="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
-            <p className="min-w-0 text-xs leading-relaxed text-ink-muted">{c.reason}</p>
-            <span className="shrink-0 whitespace-nowrap text-xs font-medium text-brand-strong transition-transform duration-200 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-x-0.5 motion-reduce:translate-x-0 motion-reduce:transition-none">
-              {t('Full analysis', 'Analisis lengkap')} <span aria-hidden="true">→</span>
-            </span>
-          </div>
-        </div>
-      </Link>
-
-      {/* Trading plan toggle + panel — outside the Link so click doesn't navigate */}
-      {plan && (
-        <div className="border-t border-line">
-          <button
-            type="button"
-            onClick={() => onTogglePlan(c.ticker)}
-            aria-expanded={planExpanded}
-            className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors duration-150 hover:bg-brand-tint/30 active:bg-brand-tint/50 dark:hover:bg-brand-tint/10"
-          >
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-strong">
-                {t('Trading Plan', 'Rencana Trading')}
-              </span>
-              {/* R:R shows on all screen sizes when collapsed */}
-              {!planExpanded && plan.rr != null && (
-                <span className="font-mono text-[11px] text-ink-muted">
-                  R:R <span className="font-semibold text-ink">{plan.rr.toFixed(1)}×</span>
-                </span>
+        <div className="min-w-0 flex-1">
+          {/* line 1 — ticker + price */}
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              {c.tier === 'relaxed' && (
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-warn">{t('developing', 'berkembang')}</span>
               )}
-              {/* Entry / CL / T1 only on sm+ */}
-              {!planExpanded && (
+              {c.board === 'Pemantauan Khusus' && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
+              <span className="text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              {c.live?.changePct != null && (
+                <span className={`text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+              )}
+            </div>
+          </div>
+
+          {/* line 2 — name + score/rating */}
+          <div className="mt-0.5 flex items-baseline justify-between gap-3">
+            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+              {c.name}
+              {c.capTier && <span> · {c.capTier}</span>}
+              {c.sector && <span> · {c.sector}</span>}
+            </p>
+            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs tabular-nums text-ink-muted">
+              {c.composite != null ? c.composite.toFixed(1) : '—'}
+              <RatingFigure rating={c.overallRating} className="text-sm" />
+            </span>
+          </div>
+
+          {/* line 3 — signal line */}
+          {(signals.length > 0 || bandar?.accdist) && (
+            <p className="mt-1.5 font-mono text-[11px] text-ink-muted">
+              {signals.join(' · ')}
+              {bandar?.accdist && (
                 <>
-                  <span className="hidden font-mono text-[11px] text-ink-muted sm:inline">
-                    {t('Entry', 'Masuk')} <span className="font-semibold text-ink">{formatRp(plan.entry)}</span>
-                  </span>
-                  <span className="hidden font-mono text-[11px] text-ink-muted sm:inline">
-                    CL <span className="font-semibold" style={{ color: 'var(--c-neg)' }}>{formatRp(plan.stop)}</span>
-                  </span>
-                  <span className="hidden font-mono text-[11px] text-ink-muted sm:inline">
-                    T1 <span className="font-semibold" style={{ color: 'var(--c-pos)' }}>{formatRp(plan.t1)}</span>
-                  </span>
+                  {signals.length > 0 && ' · '}
+                  <span className={accTone(bandar.accdist)}>{`Bandar ${bandar.accdist}`}</span>
                 </>
               )}
-            </div>
-            <span
-              className="ml-3 shrink-0 font-mono text-[13px] text-ink-muted transition-transform duration-200 motion-reduce:transition-none"
-              style={{ transform: planExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
-              aria-hidden="true"
-            >
-              ▾
-            </span>
-          </button>
-
-          {planExpanded && (
-            <TradingPlanPanel
-              plan={plan}
-              live={c.live}
-              rvol={c.rvol}
-              lastValueTraded={c.lastValueTraded}
-              scanType={scanType}
-            />
+            </p>
           )}
         </div>
-      )}
-    </article>
+
+        <RowArrow />
+      </Link>
+
+      <PlanDisclosure
+        id={c.ticker}
+        label={t('Trading plan', 'Rencana trading')}
+        plan={c.plan ?? null}
+        live={c.live}
+        rvol={c.rvol}
+        lastValueTraded={c.lastValueTraded}
+        scanType={scanType}
+        kind="momentum"
+        expanded={planExpanded}
+        onToggle={onTogglePlan}
+      />
+    </li>
+  );
+}
+
+// ---- DiscountRow (Tier C — Sentiment Discount) ----
+function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
+  const t = useT();
+  const f = c.fundamentals ?? {};
+  const liveUp = c.live?.changePct != null && c.live.changePct > 0;
+  const liveDown = c.live?.changePct != null && c.live.changePct < 0;
+  const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
+  const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=buy&autorun=1`;
+
+  const signals = [];
+  if (c.rsi14 != null) signals.push(`RSI ${Math.round(c.rsi14)}`);
+  if (f.roe != null) signals.push(`ROE ${(f.roe * 100).toFixed(0)}%`);
+  if (f.per != null && f.per > 0) signals.push(`PER ${f.per.toFixed(1)}×`);
+  if (f.pbv != null) signals.push(`PBV ${f.pbv.toFixed(2)}×`);
+  if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
+
+  return (
+    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
+        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
+
+        <div className="min-w-0 flex-1">
+          {/* line 1 — ticker + price */}
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              {c.board === 'Pemantauan Khusus' && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
+              <span className="text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              {c.live?.changePct != null && (
+                <span className={`text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+              )}
+            </div>
+          </div>
+
+          {/* line 2 — name + discount depth */}
+          <div className="mt-0.5 flex items-baseline justify-between gap-3">
+            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+              {c.name}
+              {c.capTier && <span> · {c.capTier}</span>}
+              {c.sector && <span> · {c.sector}</span>}
+            </p>
+            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink">
+              {c.discountPct != null ? `−${c.discountPct.toFixed(1)}%` : '—'}
+              <span className="ml-1 font-normal text-ink-muted">{t('vs MA50', 'vs MA50')}</span>
+            </span>
+          </div>
+
+          {/* line 3 — fundamentals line */}
+          {signals.length > 0 && (
+            <p className="mt-1.5 font-mono text-[11px] text-ink-muted">{signals.join(' · ')}</p>
+          )}
+        </div>
+
+        <RowArrow />
+      </Link>
+
+      <PlanDisclosure
+        id={`disc:${c.ticker}`}
+        label={t('Rebound plan', 'Rencana rebound')}
+        plan={c.plan ?? null}
+        live={c.live}
+        rvol={c.rvol}
+        lastValueTraded={c.lastValueTraded}
+        scanType={scanType}
+        kind="discount"
+        expanded={planExpanded}
+        onToggle={onTogglePlan}
+      />
+    </li>
+  );
+}
+
+// ---- DiscountSection (Tier C — standing, always-on) ----
+function DiscountSection({ discounts, ihsg, expandedPlan, onTogglePlan, scanType }) {
+  const t = useT();
+  const list = Array.isArray(discounts) ? discounts : [];
+  const ihsgRed = ihsg?.changePct != null && ihsg.changePct < 0;
+
+  return (
+    <section className="mt-14">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <h3 className="font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
+            {t('Sentiment discounts', 'Diskon sentimen')}
+          </h3>
+          <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+            {t(
+              'Sound blue chips (≥ Rp 1T) oversold by the market, not broken — trend intact, below MA50, washed-out RSI. Counter-trend, so size down.',
+              'Saham unggulan (≥ Rp 1T) yang oversold karena sentimen, bukan rusak — tren utuh, di bawah MA50, RSI jenuh jual. Lawan arah, perkecil posisi.',
+            )}
+          </p>
+        </div>
+        {ihsg?.changePct != null && (
+          <p className="font-mono text-xs tabular-nums text-ink-muted">
+            IHSG <span className={ihsgRed ? 'text-neg' : 'text-pos'}>{signedPct(ihsg.changePct)}</span>
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5">
+        {list.length > 0 ? (
+          <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
+            {list.map((c, i) => (
+              <DiscountRow
+                key={`disc-${c.ticker}`}
+                c={c}
+                rank={i + 1}
+                index={i}
+                planExpanded={expandedPlan === `disc:${c.ticker}`}
+                onTogglePlan={onTogglePlan}
+                scanType={scanType}
+              />
+            ))}
+          </ol>
+        ) : (
+          <div className="surface-raised rounded-2xl border border-line px-6 py-9 text-center">
+            <p className="font-serif text-base font-medium">{t('No discounts right now', 'Belum ada diskon saat ini')}</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              {ihsgRed
+                ? t('Quality names are holding up despite the red tape.', 'Saham berkualitas bertahan meski pasar merah.')
+                : t("The market isn't discounting quality today.", 'Pasar tidak sedang mendiskon saham berkualitas hari ini.')}
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -513,7 +480,7 @@ function StateNotice({ kind }) {
   const t = useT();
   const scanning = kind === 'scanning' || kind === 'no-snapshot';
   return (
-    <div className="glass-surface rounded-2xl px-6 py-12 text-center">
+    <div className="surface-raised rounded-2xl border border-line px-6 py-12 text-center">
       {scanning ? (
         <>
           <span className="jauhi-scan mx-auto mb-4" aria-hidden="true">
@@ -547,8 +514,7 @@ export default function AutoScreeningPage() {
   const abortRef = useRef(null);
   const lastAnnouncedAt = useRef(null);
 
-  const togglePlan = (ticker) =>
-    setExpandedPlan((cur) => (cur === ticker ? null : ticker));
+  const togglePlan = (id) => setExpandedPlan((cur) => (cur === id ? null : id));
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -604,12 +570,12 @@ export default function AutoScreeningPage() {
             {t('auto-screening · momentum desk', 'penyaringan otomatis · meja momentum')}
           </p>
           <h2 className="mt-1.5 font-serif text-2xl font-medium tracking-tight [text-wrap:balance] sm:text-3xl">
-            {t("Today’s 5 movers", '5 penggerak hari ini')}
+            {t('Today’s movers', 'Penggerak hari ini')}
           </h2>
           <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
             {t(
-              'Rescanned every 15 min while the market is open — strongest momentum & breakout names with live ATR-based trading plan.',
-              'Dipindai tiap 15 menit selama pasar buka — momentum & breakout terkuat dengan rencana trading ATR berbasis data langsung.',
+              'Rescanned every 15 minutes while the market is open — strongest momentum and breakout names, each with a live ATR trading plan.',
+              'Dipindai tiap 15 menit selama pasar buka — momentum & breakout terkuat, masing-masing dengan rencana trading ATR langsung.',
             )}
           </p>
         </div>
@@ -630,32 +596,32 @@ export default function AutoScreeningPage() {
       </div>
 
       <div className="mt-8">
-        <StatusBar snapshot={snapshot} />
+        <MarketStrip snapshot={snapshot} />
       </div>
 
       {marketClosed && status === 'ready' && (
-        <div className="mt-4 rounded-xl border border-line bg-well/50 px-4 py-3 text-sm text-ink-muted">
+        <p className="mt-4 text-xs text-ink-muted">
           {t(
-            "Market is closed — showing the last session's pre-close list (your overnight watchlist).",
+            'Market closed — showing the last session’s pre-close list (your overnight watchlist).',
             'Pasar tutup — menampilkan daftar jelang penutupan sesi terakhir (watchlist semalam Anda).',
           )}
-        </div>
+        </p>
       )}
 
-      {/* picks */}
-      <div className="mt-9">
+      {/* movers */}
+      <div className="mt-8">
         {status === 'loading' && (
-          <div className="space-y-5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="skeleton h-40 rounded-2xl" />
+          <div className="surface-raised space-y-2 rounded-2xl border border-line p-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="skeleton h-16 rounded-xl" />
             ))}
           </div>
         )}
         {(status === 'scanning' || status === 'empty' || status === 'error') && <StateNotice kind={status} />}
         {status === 'ready' && (
-          <div className="space-y-5">
+          <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
             {candidates.map((c, i) => (
-              <CandidateCard
+              <MoverRow
                 key={c.ticker}
                 c={c}
                 rank={i + 1}
@@ -665,12 +631,23 @@ export default function AutoScreeningPage() {
                 scanType={snapshot?.scanType}
               />
             ))}
-          </div>
+          </ol>
         )}
       </div>
 
+      {/* Tier C — Sentiment Discount: a standing counter-trend section. */}
+      {snapshot?.generatedAt && (
+        <DiscountSection
+          discounts={snapshot.discounts}
+          ihsg={snapshot.ihsg}
+          expandedPlan={expandedPlan}
+          onTogglePlan={togglePlan}
+          scanType={snapshot.scanType}
+        />
+      )}
+
       {snapshot?.summary && status === 'ready' && (
-        <p className="mt-6 font-mono text-[11px] leading-relaxed text-ink-muted">{snapshot.summary}</p>
+        <p className="mt-8 font-mono text-[11px] leading-relaxed text-ink-muted">{snapshot.summary}</p>
       )}
       <p className="mt-3 text-xs text-ink-muted">
         {t(
