@@ -77,7 +77,7 @@ export function Pill({ children, tone = 'info', className = '' }) {
     muted: 'bg-well text-ink-muted',
   };
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} transition-colors duration-150 ${className}`}>
+    <span className={`spring-color inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}>
       {children}
     </span>
   );
@@ -153,14 +153,14 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
           setDragging(false);
           addFiles(e.dataTransfer.files);
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 text-center text-sm transition-[background-color,border-color,transform] duration-200 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
+        className={`tactile flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 text-center text-sm focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
           dragging
             ? 'border-brand bg-brand-tint/70 text-ink scale-[1.01]'
             : 'border-line bg-well/40 text-ink-muted hover:-translate-y-px hover:border-ink-muted/60 hover:bg-well/70'
         }`}
       >
         <svg
-          className={`h-6 w-6 transition-colors duration-200 ${dragging ? 'text-brand-strong' : 'text-ink-muted'}`}
+          className={`spring-color h-6 w-6 ${dragging ? 'text-brand-strong' : 'text-ink-muted'}`}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

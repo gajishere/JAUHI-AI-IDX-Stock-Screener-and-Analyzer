@@ -16,6 +16,7 @@ import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { LiquidGlass } from '../components/LiquidGlass';
 import { Stepper } from '../components/Stepper';
+import { Segmented } from '../components/Segmented';
 import { fetchChart, fetchFundamentals } from '../lib/marketData';
 import { buildAnalysisReport, formatPct, formatRp, formatRpCompact } from '../lib/analysis';
 import { searchEmiten, findEmiten, brokerContext, EMITEN_COUNT } from '../lib/universe';
@@ -631,7 +632,7 @@ export default function StockAnalysisPage() {
                     activeSuggestion >= 0 ? `ticker-option-${activeSuggestion}` : undefined
                   }
                   aria-autocomplete="list"
-                  className="w-full rounded-full border border-line bg-paper py-4 pl-16 pr-6 font-mono text-lg text-ink shadow-lg shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
+                  className="tactile-soft w-full rounded-full border border-line bg-paper py-4 pl-16 pr-6 font-mono text-lg text-ink shadow-lg shadow-ink/5 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
                 />
                 {suggestionsMounted && suggestedTickers.length > 0 && (
                   <ul
@@ -639,7 +640,7 @@ export default function StockAnalysisPage() {
                     id="ticker-suggestions"
                     role="listbox"
                     style={{ transformOrigin: 'top center' }}
-                    className="surface-glass glass-morph absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line py-1.5 text-left"
+                    className="surface-glass glass-morph ios-scroll absolute left-0 right-0 z-dropdown mt-2 max-h-72 overflow-y-auto rounded-xl border border-line py-1.5 text-left"
                   >
                     {suggestedTickers.map((s, index) => (
                       <li
@@ -796,26 +797,16 @@ export default function StockAnalysisPage() {
                     'AI menelusuri berita saham dalam rentang ini dan mengklasifikasikannya sebagai positif atau negatif.',
                   )}
                 </p>
-                <div role="radiogroup" aria-label={t('News lookback window', 'Rentang berita')} className="mt-3 inline-flex rounded-full border border-line bg-well/60 p-1">
-                  {NEWS_WINDOWS.map((w) => {
-                    const active = newsWindow === w.value;
-                    return (
-                      <button
-                        key={w.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => setNewsWindow(w.value)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150 ${
-                          active
-                            ? 'bg-brand text-on-brand shadow-sm'
-                            : 'text-ink-muted hover:text-ink'
-                        }`}
-                      >
-                        {w.label}
-                      </button>
-                    );
-                  })}
+                <div className="mt-3">
+                  <Segmented
+                    role="radiogroup"
+                    ariaLabel={t('News lookback window', 'Rentang berita')}
+                    className="max-w-xs"
+                    size="sm"
+                    value={newsWindow}
+                    onChange={setNewsWindow}
+                    options={NEWS_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+                  />
                 </div>
               </div>
 
@@ -963,10 +954,10 @@ export default function StockAnalysisPage() {
               type="button"
               onClick={() => setShowFullReport((v) => !v)}
               aria-expanded={showFullReport}
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper px-4 text-sm font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink"
+              className="tactile-soft spring-color mt-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper px-4 text-sm font-medium text-ink-muted hover:border-ink-muted/60 hover:text-ink"
             >
               <svg
-                className={`h-4 w-4 transition-transform duration-200 ${showFullReport ? 'rotate-180' : ''}`}
+                className={`chev h-4 w-4 ${showFullReport ? 'rotate-180' : ''}`}
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
@@ -977,8 +968,12 @@ export default function StockAnalysisPage() {
             </button>
           )}
 
-          {(!intent || showFullReport) && (
-          <div className="report-enter mt-8">
+          {/* The full report expands/collapses with the same grid-rows 0fr→1fr
+              spring-collpase technique as the other disclosure sections, so the
+              body rises/falls into place instead of mounting/unmounting in a
+              single frame. When there's no intent (legacy path) it's always open. */}
+          <div className={`report-enter details-collapse ${!intent || showFullReport ? 'details-collapse-open' : ''} mt-8`}>
+          <div>
           {/* Report masthead */}
           <header className="relative border-b border-line pb-6">
             <div className="relative flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
@@ -1190,7 +1185,7 @@ export default function StockAnalysisPage() {
                 {news.articles.length > 0 && (
                   <ul className="mt-2 space-y-2">
                     {news.articles.map((a, i) => (
-                      <li key={i} className="rounded-md border border-line bg-paper/60 px-3 py-2">
+                      <li key={i} className="list-item-enter rounded-md border border-line bg-paper/60 px-3 py-2" style={{ '--i': i }}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             {a.url ? (
@@ -1198,7 +1193,7 @@ export default function StockAnalysisPage() {
                                 href={a.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sm font-medium leading-snug text-ink hover:text-brand hover:underline"
+                                className="spring-color text-sm font-medium leading-snug text-ink hover:text-brand hover:underline"
                               >
                                 {a.headline || t('(untitled)', '(tanpa judul)')}
                               </a>
@@ -1659,7 +1654,7 @@ export default function StockAnalysisPage() {
             </div>
           </div>
           </div>
-          )}
+          </div>
         </article>
       )}
 

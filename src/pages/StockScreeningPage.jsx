@@ -10,6 +10,7 @@ import {
   Row,
 } from '../components/report';
 import { Stepper } from '../components/Stepper';
+import { Segmented } from '../components/Segmented';
 import { DatePicker } from '../components/DatePicker';
 import { Modal } from '../components/Modal';
 import { LiquidGlass } from '../components/LiquidGlass';
@@ -215,7 +216,7 @@ function WhyNotRecommended({ date, filters, results }) {
           aria-controls="screening-ticker-suggestions"
           aria-activedescendant={active >= 0 ? `screening-ticker-option-${active}` : undefined}
           aria-autocomplete="list"
-          className="w-full rounded-full border border-line bg-paper py-2.5 pl-11 pr-5 font-mono text-sm text-ink shadow-sm shadow-ink/5 transition-[transform,opacity] duration-200 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="tactile-soft w-full rounded-full border border-line bg-paper py-2.5 pl-11 pr-5 font-mono text-sm text-ink shadow-sm shadow-ink/5 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
         {suggestionsMounted && suggestions.length > 0 && (
           <ul
@@ -908,7 +909,7 @@ export default function StockScreeningPage() {
                     <div
                       ref={filtersPanelRef}
                       style={{ transformOrigin: 'top center' }}
-                      className="surface-glass absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line p-5 text-left"
+                      className="surface-glass ios-scroll absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line p-5 text-left"
                     >
                       <div className="space-y-4">
                         <div className="space-y-1.5">
@@ -937,41 +938,29 @@ export default function StockScreeningPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
                             <FieldLabel>{t('Stocks to surface', 'Jumlah saham')}</FieldLabel>
-                            <div className="inline-flex rounded-lg border border-line p-1">
-                              {COUNT_OPTIONS.map((n) => (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  onClick={() => setNumStocks(n)}
-                                  className={`tactile-soft rounded-md px-2.5 py-1 text-sm font-medium tabular-nums ${
-                                    numStocks === n ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                  }`}
-                                >
-                                  {n}
-                                </button>
-                              ))}
-                            </div>
+                            <Segmented
+                              role="radiogroup"
+                              ariaLabel={t('Stocks to surface', 'Jumlah saham')}
+                              size="sm"
+                              value={numStocks}
+                              onChange={setNumStocks}
+                              options={COUNT_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+                            />
                           </div>
 
                           <div className="space-y-1.5">
                             <FieldLabel>{t('Analysis mode', 'Mode analisis')}</FieldLabel>
-                            <div className="inline-flex rounded-lg border border-line p-1">
-                              {[
+                            <Segmented
+                              role="radiogroup"
+                              ariaLabel={t('Analysis mode', 'Mode analisis')}
+                              size="sm"
+                              value={analysisMode}
+                              onChange={setAnalysisMode}
+                              options={[
                                 { value: 'closing', label: t('EOD close', 'Tutup EOD') },
                                 { value: 'midday', label: t('Midday', 'Tengah hari') },
-                              ].map((m) => (
-                                <button
-                                  key={m.value}
-                                  type="button"
-                                  onClick={() => setAnalysisMode(m.value)}
-                                  className={`tactile-soft rounded-md px-2.5 py-1 text-sm font-medium ${
-                                    analysisMode === m.value ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-                                  }`}
-                                >
-                                  {m.label}
-                                </button>
-                              ))}
-                            </div>
+                              ]}
+                            />
                           </div>
                         </div>
 
@@ -998,7 +987,7 @@ export default function StockScreeningPage() {
                                       );
                                     }
                                   }}
-                                  className={`tactile-soft rounded-md px-2.5 py-1 text-xs font-medium ${
+                                  className={`tactile-soft whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium ${
                                     active ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
                                   }`}
                                 >
@@ -1055,8 +1044,8 @@ export default function StockScreeningPage() {
                   <div className="surface-raised mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
                     <p className="text-sm font-medium">{t('Saved screenings', 'Penyaringan tersimpan')}</p>
                     <ul className="mt-3 space-y-2">
-                      {savedScreenings.slice(0, 5).map((s) => (
-                        <li key={s.name} className="flex items-baseline justify-between gap-3 text-sm">
+                      {savedScreenings.slice(0, 5).map((s, i) => (
+                        <li key={s.name} className="list-item-enter flex items-baseline justify-between gap-3 text-sm" style={{ '--i': i }}>
                           <span className="font-medium">{s.name}</span>
                           <span className="font-mono text-xs text-ink-muted">
                             {s.date} · {t(`${s.results.length} stocks`, `${s.results.length} saham`)}
@@ -1165,7 +1154,7 @@ export default function StockScreeningPage() {
                         'Broker accumulation/distribution for the session. Click to load and expand the broker summary.',
                         'Akumulasi/distribusi broker untuk sesi ini. Klik untuk memuat dan membuka ringkasan broker.',
                       )}
-                      className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 transition-colors hover:bg-well/70"
+                      className="tactile-soft spring-color -mr-1 inline-flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-2 pr-1.5 hover:bg-well/70"
                     >
                       {s.bandarmology?.accdist ? (
                         <Pill tone={accTone(s.bandarmology.accdist)}>{s.bandarmology.accdist}</Pill>
@@ -1175,7 +1164,7 @@ export default function StockScreeningPage() {
                         </span>
                       )}
                       <svg
-                        className="h-3 w-3 shrink-0 text-ink-muted transition-transform duration-200"
+                        className="chev h-3 w-3 shrink-0 text-ink-muted"
                         style={{ transform: expanded ? 'rotate(180deg)' : undefined }}
                         viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                         aria-hidden="true"
@@ -1271,7 +1260,7 @@ export default function StockScreeningPage() {
             </header>
 
             {/* Ranked table */}
-            <div className="mt-6 overflow-x-auto">
+            <div className="ios-scroll mt-6 overflow-x-auto">
               <table className="w-full table-fixed">
                 <colgroup>
                   <col className="w-10" />
@@ -1295,7 +1284,7 @@ export default function StockScreeningPage() {
                   {screenings.map((result, index) => (
                     <tr
                       key={result.ticker}
-                      className="result-row-enter align-top transition-colors duration-150 hover:bg-well/60"
+                      className="result-row-enter spring-color align-top hover:bg-well/60"
                       style={{ '--i': Math.min(index, 9) }}
                     >
                       <td className="py-3.5 pl-1 pr-2 font-mono text-sm tabular-nums text-ink-muted">

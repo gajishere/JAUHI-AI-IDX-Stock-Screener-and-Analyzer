@@ -734,6 +734,25 @@
     transform: scale(0.97);
   }
 
+  /* ===== Spring-eased transitions for state changes (iOS HIG) =====
+     Two tiny helpers so interactive color/transform transitions across the app
+     use the spring tokens instead of generic `duration-*` + default easing.
+     `.spring-color` is for any color/background/border swap on hover/active
+     (rides the press spring — the snappiest, since a tap is the most frequent
+     gesture); `.chev` is for chevron/arrow rotations on disclosure toggles
+     (rides the popover spring — a chrome layer settling). Both are compositor-
+     safe and collapse under the global reduced-motion rule at the bottom. */
+  .spring-color {
+    transition:
+      background-color var(--spring-press-dur) var(--spring-press),
+      border-color var(--spring-press-dur) var(--spring-press),
+      color var(--spring-press-dur) var(--spring-press);
+  }
+
+  .chev {
+    transition: transform var(--spring-popover-dur) var(--spring-popover);
+  }
+
   /* ===== Momentum scroll (iOS HIG) =====
      The zero-cost baseline: contain overscroll so the page never scrolls out
      from under a list, and add -webkit-overflow-scrolling so iOS keeps momentum

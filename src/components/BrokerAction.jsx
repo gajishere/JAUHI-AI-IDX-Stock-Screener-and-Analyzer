@@ -1,4 +1,5 @@
-import { formatCompact, formatRpCompact } from '../lib/analysis';
+import { formatCompact } from '../lib/analysis';
+import { useFlashOnChange } from '../lib/useFlashOnChange';
 
 // The accumulation↔distribution read, driven by the IDX top-5 net concentration
 // (not the raw session buy/sell totals, which always net to ~zero because they
@@ -19,6 +20,9 @@ export function BrokerActionGauge({ bandar, t }) {
   const sign = netPct > 0 ? '+' : '';
   // Direction tints the label, not the bar.
   const dirTone = netPct > 0 ? 'text-pos' : netPct < 0 ? 'text-neg' : 'text-ink-muted';
+  // Flash the net-flow label when it changes — a live broker tape that shifts on
+  // a refresh should read as moving, not as a frozen number snapping forward.
+  const labelRef = useFlashOnChange(netRatio);
 
   return (
     <div>
@@ -26,7 +30,10 @@ export function BrokerActionGauge({ bandar, t }) {
         <p className="font-mono text-xs text-ink-muted">
           {t('Broker action · net flow', 'Aksi broker · aliran net')}
         </p>
-        <span className={`font-mono text-xs font-medium tabular-nums ${dirTone}`}>
+        <span
+          ref={labelRef}
+          className={`font-mono text-xs font-medium tabular-nums ${dirTone}`}
+        >
           {sign}
           {netPct}%
         </span>
@@ -40,8 +47,11 @@ export function BrokerActionGauge({ bandar, t }) {
         {/* Knob */}
         <span
           aria-hidden="true"
-          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-paper bg-brand shadow-[0_1px_3px_rgb(0_0_0/0.18)] transition-[left] duration-200 motion-reduce:transition-none"
-          style={{ left: `${pct}%` }}
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-paper bg-brand shadow-[0_1px_3px_rgb(0_0_0/0.18)] motion-reduce:transition-none"
+          style={{
+            left: `${pct}%`,
+            transition: 'left var(--spring-settle-dur) var(--spring-settle)',
+          }}
         />
       </div>
       <div className="mt-1.5 flex justify-between font-mono text-[11px] text-ink-muted">
@@ -61,15 +71,11 @@ export function BrokerActionGauge({ bandar, t }) {
 //
 // `maxRows` caps each side (defaults to 5). Buys and sells are rendered
 // independently — a long sell tape no longer pads the buy column with em-dashes.
-export function BrokerActionColumns({ bandar, t, maxRows = 5 }) {
-  const buys = (bandar.buyRows ?? []).slice(0, maxRows);
-  const sells = (bandar.sellRows ?? []).slice(0, maxRows);
-  if (buys.length === 0 && sells.length === 0) return null;
-
-  const avgBuy = buys.length ? buys.reduce((s, r) => s + (r.avg || 0), 0) / buys.length : 0;
-  const avgSell = sells.length ? sells.reduce((s, r) => s + (r.avg || 0), 0) / sells.length : 0;
-
-  const Column = ({ title, rows, valueTone }) => (
+// One side of the paired tape (buyers or sellers). Hoisted to module scope so
+// it keeps a stable identity across renders rather than being re-created inside
+// BrokerActionColumns on every render.
+function BrokerColumn({ title, rows, valueTone, t }) {
+  return (
     <div className="min-w-0">
       <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-ink-muted">{title}</p>
       {rows.length > 0 ? (
@@ -77,7 +83,8 @@ export function BrokerActionColumns({ bandar, t, maxRows = 5 }) {
           {rows.map((r, i) => (
             <li
               key={`${r.code}-${i}`}
-              className="flex items-baseline gap-1.5 text-xs"
+              className="list-item-enter flex items-baseline gap-1.5 text-xs"
+              style={{ '--i': i }}
               title={r.foreign ? t('Foreign broker', 'Broker asing') : undefined}
             >
               <span className="shrink-0 font-mono font-medium text-ink">
@@ -96,12 +103,21 @@ export function BrokerActionColumns({ bandar, t, maxRows = 5 }) {
       )}
     </div>
   );
+}
+
+export function BrokerActionColumns({ bandar, t, maxRows = 5 }) {
+  const buys = (bandar.buyRows ?? []).slice(0, maxRows);
+  const sells = (bandar.sellRows ?? []).slice(0, maxRows);
+  if (buys.length === 0 && sells.length === 0) return null;
+
+  const avgBuy = buys.length ? buys.reduce((s, r) => s + (r.avg || 0), 0) / buys.length : 0;
+  const avgSell = sells.length ? sells.reduce((s, r) => s + (r.avg || 0), 0) / sells.length : 0;
 
   return (
     <div>
       <div className="grid grid-cols-2 gap-x-6">
-        <Column title={t('Top buyers', 'Pembeli teratas')} rows={buys} valueTone="text-pos" />
-        <Column title={t('Top sellers', 'Penjual teratas')} rows={sells} valueTone="text-neg" />
+        <BrokerColumn title={t('Top buyers', 'Pembeli teratas')} rows={buys} valueTone="text-pos" t={t} />
+        <BrokerColumn title={t('Top sellers', 'Penjual teratas')} rows={sells} valueTone="text-neg" t={t} />
       </div>
       {(avgBuy > 0 || avgSell > 0) && (
         <p className="mt-3 font-mono text-[11px] text-ink-muted">
@@ -141,7 +157,7 @@ export function BrokerActionTable({ bandar, t, compact = false, maxRows }) {
   const minW = compact ? 'min-w-[420px]' : 'min-w-[560px]';
 
   return (
-    <div className="overflow-x-auto">
+    <div className="ios-scroll overflow-x-auto">
       <table className={`w-full ${minW} border-collapse ${numText}`}>
         <thead>
           <tr className="border-b border-line font-mono text-xs text-ink-muted">

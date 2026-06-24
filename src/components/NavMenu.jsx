@@ -60,9 +60,13 @@ export function NavMenu() {
 
   // Belt-and-suspenders: any navigation (a link tap, a deep-link, the browser
   // back button) collapses the menu so it never lingers over the new page.
-  useEffect(() => {
+  // Adjusting state during render (React's documented pattern) instead of an
+  // effect avoids the extra commit + cascading render an effect would cause.
+  const [lastPath, setLastPath] = useState(location.pathname);
+  if (lastPath !== location.pathname) {
+    setLastPath(location.pathname);
     setOpen(false);
-  }, [location.pathname]);
+  }
 
   // Interruptible presence: the panel scales+fades from its top-left origin (the
   // trigger). Reopening mid-close cancels the close cleanly.

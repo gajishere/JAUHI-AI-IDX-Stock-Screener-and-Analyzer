@@ -52,7 +52,7 @@ function DetailSection({ section }) {
         </ul>
       )}
       {Array.isArray(section.rows) && section.rows.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
+        <div className="ios-scroll mt-3 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-y border-line text-ink-muted">
@@ -236,8 +236,8 @@ export default function ApiStatusPage() {
 
           {logs.length > 0 ? (
             <ol className="divide-y divide-line border-y border-line">
-              {logs.map((log) => (
-                <li key={log.id} className="grid gap-3 py-4 md:grid-cols-[8rem_1fr]">
+              {logs.map((log, i) => (
+                <li key={log.id} className="list-item-enter grid gap-3 py-4 md:grid-cols-[8rem_1fr]" style={{ '--i': Math.min(i, 9) }}>
                   <div>
                     <p className="font-mono text-xs text-ink-muted">{formatTime(log.at)}</p>
                     <Pill tone={logPillTone(log.level)} className="mt-2">
@@ -252,7 +252,7 @@ export default function ApiStatusPage() {
                           type="button"
                           onClick={() => toggleDetails(log.id)}
                           aria-expanded={expanded.has(log.id)}
-                          className="inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted hover:text-ink sm:min-h-8"
+                          className="tactile-soft spring-color inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-medium text-ink-muted hover:border-ink-muted hover:text-ink sm:min-h-8"
                         >
                           {expanded.has(log.id) ? t('Hide details', 'Sembunyikan detail') : t('Details', 'Detail')}
                         </button>

@@ -262,7 +262,7 @@ export function DatePicker({ value, onChange, min, max, placeholder, inline = fa
           onFocus={() => setIsOpen(true)}
           readOnly
           placeholder={placeholderText}
-          className={`w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted transition-[transform,opacity] duration-200 hover:border-ink-muted/60 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 focus:scale-[1.02] cursor-pointer`}
+          className={`tactile-soft w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted hover:border-ink-muted/60 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 focus:scale-[1.02] cursor-pointer`}
           aria-label={t('Date picker', 'Pemilih tanggal')}
           aria-expanded={isOpen}
           aria-controls="date-picker-popup"

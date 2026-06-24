@@ -11,7 +11,7 @@ export function Stepper({ steps, current }) {
         return (
           <li key={label} className="flex items-center gap-2.5 sm:gap-3">
             <span
-              className={`flex items-center gap-2 text-xs font-medium transition-[color] duration-200 ${
+              className={`spring-color flex items-center gap-2 text-xs font-medium ${
                 state === 'todo' ? 'text-ink-muted/60' : 'text-ink'
               }`}
             >

@@ -15,7 +15,7 @@ function compactText(text, max = 900) {
 // instead of a bare status code so the API Status page can say what's wrong.
 // Exported so the other AI surfaces (news, screening) report the same detail.
 export async function rejectWithReason(response, label = 'Claude API error') {
-  let reason = '';
+  let reason;
   try {
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {

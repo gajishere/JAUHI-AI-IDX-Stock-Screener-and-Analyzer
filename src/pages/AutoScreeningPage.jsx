@@ -13,6 +13,7 @@ import { useT } from '../lib/i18n';
 import { useSound } from '../lib/sound';
 import { Row, RatingFigure } from '../components/report';
 import { marketStatus, nextScanSlot, wibNow } from '../lib/marketHours';
+import { useFlashOnChange } from '../lib/useFlashOnChange';
 
 const POLL_MS = 15 * 60_000;
 
@@ -207,7 +208,7 @@ function PlanDisclosure({ id, label, plan, live, rvol, lastValueTraded, scanType
         type="button"
         onClick={() => onToggle(id)}
         aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left"
+        className="tactile-soft flex w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left"
       >
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-strong">{label}</span>
@@ -228,7 +229,7 @@ function PlanDisclosure({ id, label, plan, live, rvol, lastValueTraded, scanType
           )}
         </span>
         <span
-          className="shrink-0 font-mono text-[13px] text-ink-muted transition-transform duration-200 motion-reduce:transition-none"
+          className="chev shrink-0 font-mono text-[13px] text-ink-muted motion-reduce:transition-none"
           style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           aria-hidden="true"
         >
@@ -246,7 +247,7 @@ function PlanDisclosure({ id, label, plan, live, rvol, lastValueTraded, scanType
 function RowArrow() {
   return (
     <svg
-      className="h-4 w-4 shrink-0 self-center text-ink-muted/45 transition-transform duration-200 [transition-timing-function:var(--ease-out-quart)] group-hover:translate-x-0.5 group-hover:text-ink-muted motion-reduce:transition-none"
+      className="chev spring-color h-4 w-4 shrink-0 self-center text-ink-muted/45 group-hover:translate-x-0.5 group-hover:text-ink-muted motion-reduce:transition-none"
       viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
@@ -263,6 +264,12 @@ function MoverRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
   const liveDown = c.live?.changePct != null && c.live.changePct < 0;
   const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
   const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=buy&autorun=1`;
+
+  // Flash the live price + change% when a poll refresh moves them — a live list
+  // reads as moving, not as a frozen row snapping forward. No count-up (would
+  // misrepresent a real mid-poll price); the tint conveys direction only.
+  const priceRef = useFlashOnChange(c.live?.last ?? c.close);
+  const changeRef = useFlashOnChange(c.live?.changePct);
 
   // Signal as one quiet inline line — numbers are the content, not chips.
   const signals = [];
@@ -289,9 +296,9 @@ function MoverRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
               )}
             </div>
             <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-              <span className="text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
               {c.live?.changePct != null && (
-                <span className={`text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
               )}
             </div>
           </div>
@@ -351,6 +358,11 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
   const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
   const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=buy&autorun=1`;
 
+  // Same directional flash as MoverRow — a discount's live price/percent still
+  // moves on a poll, and the tint helps the eye catch it.
+  const priceRef = useFlashOnChange(c.live?.last ?? c.close);
+  const changeRef = useFlashOnChange(c.live?.changePct);
+
   const signals = [];
   if (c.rsi14 != null) signals.push(`RSI ${Math.round(c.rsi14)}`);
   if (f.roe != null) signals.push(`ROE ${(f.roe * 100).toFixed(0)}%`);
@@ -376,9 +388,9 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
               )}
             </div>
             <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-              <span className="text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
               {c.live?.changePct != null && (
-                <span className={`text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
               )}
             </div>
           </div>

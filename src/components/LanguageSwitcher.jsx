@@ -1,4 +1,5 @@
 import { useLang } from '../lib/i18n';
+import { Segmented } from './Segmented';
 
 // SVG flags rather than emoji — Windows does not render regional-indicator
 // emoji as flags (it shows the country letters), so the symbols are drawn
@@ -38,31 +39,22 @@ export function LanguageSwitcher() {
   const { lang, setLang } = useLang();
 
   return (
-    <div
+    <Segmented
       role="group"
-      aria-label="Language / Bahasa"
-      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line/70 bg-well/40 p-1 shadow-sm shadow-ink/5 backdrop-blur-sm"
-    >
-      {OPTIONS.map(({ code, short, name, Flag }) => {
-        const active = lang === code;
-        return (
-          <button
-            key={code}
-            type="button"
-            onClick={() => setLang(code)}
-            aria-pressed={active}
-            title={name}
-            className={`tactile-soft inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
-              active ? 'bg-brand text-on-brand' : 'text-ink-muted hover:text-ink'
-            }`}
-          >
-            <span className="inline-flex h-3 w-[1.1rem] overflow-hidden rounded-[2px] ring-1 ring-ink/10">
-              <Flag />
-            </span>
-            {short}
-          </button>
-        );
-      })}
-    </div>
+      ariaLabel="Language / Bahasa"
+      className="backdrop-blur-sm"
+      value={lang}
+      onChange={setLang}
+      options={OPTIONS.map(({ code, short, name, Flag }) => ({
+        value: code,
+        label: short,
+        title: name,
+        icon: (
+          <span className="inline-flex h-3 w-[1.1rem] overflow-hidden rounded-[2px] ring-1 ring-ink/10">
+            <Flag />
+          </span>
+        ),
+      }))}
+    />
   );
 }

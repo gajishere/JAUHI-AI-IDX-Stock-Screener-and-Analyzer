@@ -3,6 +3,7 @@ import { useT } from '../lib/i18n';
 import { useTheme } from '../lib/theme';
 import { useSound } from '../lib/sound';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { Segmented } from './Segmented';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
 
@@ -77,10 +78,6 @@ export function SettingsMenu() {
   // origin (the gear). Reopening mid-close cancels the close cleanly.
   const { mounted, nodeRef } = useSpringPresence(open, presets.popoverEnter, presets.popoverExit);
 
-  // The sliding segmented-indicator offset, computed once so the JSX stays parser-clean.
-  const indicatorOffset = theme === 'dark' ? '100%' : '0';
-  const soundOffset = soundEnabled ? '100%' : '0';
-
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -110,92 +107,46 @@ export function SettingsMenu() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Appearance', 'Tampilan')}
             </p>
-            {/* iOS segmented control: one shared track, the active segment carried by a
-                sliding pill that springs between slots via --spring-settle. The pill is
-                absolutely positioned and translated by index, so it GLIDES instead of
-                cross-fading — the signature native segmented-control motion. */}
-            <div
+            {/* iOS segmented control: the active segment carried by a sliding pill
+                that springs between slots via --spring-settle. Segmented owns the
+                indicator + buttons so every segmented control across the app shares
+                one motion body. */}
+            <Segmented
               role="group"
-              aria-label={t('Theme', 'Tema')}
-              className="relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute top-1 bottom-1 left-1 rounded-full bg-brand shadow-sm shadow-brand/25"
-                style={{
-                  width: 'calc(50% - 4px)',
-                  transform: 'translateX(' + indicatorOffset + ')',
-                  transition: 'transform var(--spring-settle-dur) var(--spring-settle)',
-                }}
-              />
-              {THEMES.map(({ value, labelEn, labelId, Icon }) => {
-                const active = theme === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setTheme(value)}
-                    aria-pressed={active}
-                    className={`tactile-soft relative z-[1] inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
-                      active ? 'text-on-brand' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    <Icon />
-                    {t(labelEn, labelId)}
-                  </button>
-                );
-              })}
-            </div>
+              ariaLabel={t('Theme', 'Tema')}
+              value={theme}
+              onChange={setTheme}
+              options={THEMES.map(({ value, labelEn, labelId, Icon }) => ({
+                value,
+                label: t(labelEn, labelId),
+                icon: <Icon />,
+              }))}
+            />
           </div>
 
           <div className="mt-4 border-t border-line pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Sound', 'Suara')}
             </p>
-            {/* Same iOS segmented-control vocabulary as the theme toggle. Turning
-                sound on plays a sample ding immediately — it's both the feedback
-                ("this is the chime you'll hear") and the user gesture that
-                unlocks the AudioContext for all later triggers. */}
-            <div
+            {/* Same Segmented vocabulary as the theme toggle. Turning sound on
+                plays a sample ding immediately — it's both the feedback ("this is
+                the chime you'll hear") and the user gesture that unlocks the
+                AudioContext for all later triggers. */}
+            <Segmented
               role="group"
-              aria-label={t('Completion chime', 'Lonceng selesai')}
-              className="relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute top-1 bottom-1 left-1 rounded-full bg-brand shadow-sm shadow-brand/25"
-                style={{
-                  width: 'calc(50% - 4px)',
-                  transform: 'translateX(' + soundOffset + ')',
-                  transition: 'transform var(--spring-settle-dur) var(--spring-settle)',
-                }}
-              />
-              {[
-                { value: false, labelEn: 'Off', labelId: 'Mati', Icon: null },
-                { value: true, labelEn: 'On', labelId: 'Aktif', Icon: BellIcon },
-              ].map(({ value, labelEn, labelId, Icon }) => {
-                const active = soundEnabled === value;
-                return (
-                  <button
-                    key={String(value)}
-                    type="button"
-                    onClick={() => {
-                      setSoundEnabled(value);
-                      // Play the chime when enabling so the gesture unlocks audio
-                      // and the trader hears exactly what each completion will sound like.
-                      if (value) playDing();
-                    }}
-                    aria-pressed={active}
-                    className={`tactile-soft relative z-[1] inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium sm:min-h-9 ${
-                      active ? 'text-on-brand' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    {Icon && <Icon />}
-                    {t(labelEn, labelId)}
-                  </button>
-                );
-              })}
-            </div>
+              ariaLabel={t('Completion chime', 'Lonceng selesai')}
+              value={soundEnabled}
+              onChange={(v) => {
+                setSoundEnabled(v);
+                // Play the chime when enabling so the gesture unlocks audio and
+                // the trader hears exactly what each completion will sound like.
+                if (v) playDing();
+              }}
+              options={[
+                { value: false, label: t('Off', 'Mati') },
+                { value: true, label: t('On', 'Aktif'), icon: <BellIcon /> },
+              ]}
+            />
             <p className="mt-2 text-xs leading-relaxed text-ink-muted">
               {t('Chimes when a scan, analysis, or re-rank finishes.', 'Berbunyi saat pemindaian, analisis, atau pemeringkatan ulang selesai.')}
             </p>
