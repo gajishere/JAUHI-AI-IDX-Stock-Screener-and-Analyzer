@@ -4,11 +4,18 @@
 // into one reusable component so every tab/segment switch across the app glides
 // with the SAME settle spring instead of jumping on an instant bg swap.
 //
-// The indicator is absolutely positioned and translated by the active index, so
-// it GLIDES rather than cross-fading; transform/opacity only, GPU-friendly.
-// Reduced motion is handled by the global `* { transition-duration: 0.01ms }`
-// rule in index.css, so the pill snaps to the slot for motion-sensitive users
-// with no extra wiring here.
+// The indicator GLIDES via transform; it is sized and positioned by MEASURING
+// the active button rather than assuming equal-width slots. Equal-width math
+// breaks the moment labels differ in length (e.g. "EOD close" vs "Midday", or
+// "15" vs "3"): `whitespace-nowrap` + per-button padding makes the wider label's
+// min-content exceed its even share, so flexbox hands it more room and the pill
+// — computed from a fixed slot width — lands off-centre. Measuring the real
+// button keeps the pill locked to it for any label set. A ResizeObserver
+// re-measures when the track resizes (responsive reflow, font load, popover
+// open). Reduced motion is handled by the global `* { transition-duration }`
+// rule in index.css, so the pill snaps to the slot for motion-sensitive users.
+
+import { useLayoutEffect, useRef, useState } from 'react';
 
 export function Segmented({
   // options: [{ value, label, icon?: ReactNode, title?: string }]
@@ -29,9 +36,31 @@ export function Segmented({
     options.findIndex((o) => o.value === value),
   );
   const count = options.length;
-  // The indicator sits inside the track's padding (p-1 = 4px), so its width is
-  // one slot minus the per-side inset, and it translates by one slot per index.
-  const gap = 4;
+
+  const trackRef = useRef(null);
+  const btnRefs = useRef([]);
+  // The pill geometry, measured from the active button: x is its offset from the
+  // first button's left edge (which is where the pill rests via `left-1`), w is
+  // the button's rendered width. Null until the first measure so the CSS
+  // fallback below carries the very first paint.
+  const [pill, setPill] = useState(null);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const first = btnRefs.current[0];
+      const active = btnRefs.current[activeIndex];
+      if (!first || !active) return;
+      // offsetLeft/offsetWidth are LAYOUT values, immune to any ancestor
+      // transform — the pill must track the button's layout box, not its
+      // visual box. getBoundingClientRect would read the scaled-down size while
+      // a parent popover is mid spring-scale and freeze the pill too narrow.
+      setPill({ x: active.offsetLeft - first.offsetLeft, w: active.offsetWidth });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
+    return () => ro.disconnect();
+  }, [activeIndex, count, value]);
 
   const sizeClasses =
     size === 'sm'
@@ -40,27 +69,35 @@ export function Segmented({
 
   return (
     <div
+      ref={trackRef}
       role={role}
       aria-label={ariaLabel}
       className={`relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1 ${className}`}
     >
       {/* The sliding pill. Sits behind the buttons (z-0); they're lifted to z-1
-          so their content stays crisp above the moving fill. */}
+          so their content stays crisp above the moving fill. Rests at the first
+          button's left edge (left-1 = the track's content origin) and translates
+          to the measured active button. */}
       <span
         aria-hidden="true"
         className="absolute top-1 bottom-1 left-1 z-0 rounded-full bg-brand shadow-sm shadow-brand/25"
         style={{
-          width: `calc((100% - ${gap * 2}px) / ${count})`,
-          transform: `translateX(calc(${activeIndex} * 100%))`,
+          width: pill ? `${pill.w}px` : `calc((100% - 8px) / ${count})`,
+          transform: pill
+            ? `translateX(${pill.x}px)`
+            : `translateX(calc(${activeIndex} * 100%))`,
           transition:
-            'transform var(--spring-settle-dur) var(--spring-settle)',
+            'transform var(--spring-settle-dur) var(--spring-settle), width var(--spring-settle-dur) var(--spring-settle)',
         }}
       />
-      {options.map((opt) => {
+      {options.map((opt, i) => {
         const active = opt.value === value;
         return (
           <button
             key={String(opt.value)}
+            ref={(el) => {
+              btnRefs.current[i] = el;
+            }}
             type="button"
             role={role === 'radiogroup' ? 'radio' : undefined}
             aria-checked={role === 'radiogroup' ? active : undefined}
