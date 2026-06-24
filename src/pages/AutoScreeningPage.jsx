@@ -368,6 +368,9 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              {c.depth === 'shallow' && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-muted">{t('shallow', 'dangkal')}</span>
+              )}
               {c.board === 'Pemantauan Khusus' && (
                 <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
               )}
@@ -388,8 +391,14 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
               {c.sector && <span> · {c.sector}</span>}
             </p>
             <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink">
-              {c.discountPct != null ? `−${c.discountPct.toFixed(1)}%` : '—'}
-              <span className="ml-1 font-normal text-ink-muted">{t('vs MA50', 'vs MA50')}</span>
+              {c.discountPct == null
+                ? '—'
+                : c.discountPct > 0.05
+                  ? `−${c.discountPct.toFixed(1)}%`
+                  : t('at MA50', 'di MA50')}
+              {c.discountPct != null && c.discountPct > 0.05 && (
+                <span className="ml-1 font-normal text-ink-muted">{t('vs MA50', 'vs MA50')}</span>
+              )}
             </span>
           </div>
 

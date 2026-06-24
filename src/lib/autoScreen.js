@@ -302,8 +302,10 @@ function serializeDiscount(d) {
   const f = d.fundamentals ?? {};
   const s = d.signals ?? {};
   const plan = discountPlanFrom(d);
+  const depth = d._depth ?? 'strict';
   return {
     kind: 'discount',
+    depth, // 'strict' (headline thesis) | 'shallow' (relaxed fallback tier)
     ticker: d.ticker,
     name: d.name ?? null,
     sector: d.sector ?? null,
@@ -346,14 +348,43 @@ function serializeDiscount(d) {
       : null,
     reason: (() => {
       const parts = [];
-      if (d._discountGap != null) parts.push(`${(d._discountGap * 100).toFixed(1)}% below MA50`);
+      if (d._discountGap != null) {
+        // The widened band lets a name sit just above MA50 (negative gap) — call
+        // that "at MA50" rather than rendering a nonsensical negative discount.
+        parts.push(d._discountGap > 0.001 ? `${(d._discountGap * 100).toFixed(1)}% below MA50` : 'at MA50');
+      }
       if (s.rsi14 != null) parts.push(`RSI ${Math.round(s.rsi14)}`);
       if (f.roe != null) parts.push(`ROE ${(f.roe * 100).toFixed(0)}%`);
       if (f.per != null && f.per > 0) parts.push(`PER ${f.per.toFixed(1)}×`);
-      return `Sentiment discount — ${parts.join(', ') || 'oversold quality'}`;
+      const label = depth === 'shallow' ? 'Shallow discount' : 'Sentiment discount';
+      return `${label} — ${parts.join(', ') || 'oversold quality'}`;
     })(),
   };
 }
+
+// Technical gate for the discount track, parameterized so the relaxation ladder
+// can reuse it. `ma200Mult` is the falling-knife floor (close ≥ MA200 × mult),
+// `bandMult` widens the "below the mean" band (close < MA50 × mult), `rsiCeil`
+// caps how un-washed-out a name may still be. Liquidity/cap floors never relax.
+function passesDiscountGate(d, { rsiCeil, ma200Mult, bandMult }) {
+  const s = d.signals ?? {};
+  if (d.marketCap == null || d.marketCap < 1e12) return false; // ≥ Rp1T
+  if (d.lastValueTraded < 1e10) return false; // still tradable today
+  if (s.sma200 == null || d.close == null) return false;
+  if (d.close < s.sma200 * ma200Mult) return false; // trend NOT broken (falling-knife guard)
+  if (s.sma50 == null || d.close >= s.sma50 * bandMult) return false; // below the mean = a discount
+  if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > rsiCeil) return false; // washed out, not catastrophic
+  return true;
+}
+
+// STRICT first (the headline thesis), then SHALLOW as a one-notch fallback that
+// only fires when STRICT is empty. STRICT already runs looser than the original
+// gate: RSI ceiling 52 (was 48) and a 1% band around MA50 so names hovering at
+// the mean still count.
+const DISCOUNT_TIERS = [
+  { depth: 'strict', rsiCeil: 52, ma200Mult: 0.97, bandMult: 1.01 },
+  { depth: 'shallow', rsiCeil: 58, ma200Mult: 0.93, bandMult: 1.03 },
+];
 
 // Tier C screener. Seeds from the non-bank quality universe (≥ Rp1T, size-ranked
 // — the blue-chip scan shape with a Rp1T floor), enriches with charts, gates on
@@ -382,17 +413,21 @@ async function screenSentimentDiscounts(date, count) {
     await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
   ).filter(Boolean);
 
-  // Cheap technical gate: liquid + structurally intact + oversold + at a discount.
-  const oversold = enriched.filter((d) => {
-    const s = d.signals ?? {};
-    if (d.marketCap == null || d.marketCap < 1e12) return false; // ≥ Rp1T
-    if (d.lastValueTraded < 1e10) return false; // still tradable today
-    if (s.sma200 == null || d.close == null) return false;
-    if (d.close < s.sma200 * 0.97) return false; // trend NOT broken (falling-knife guard)
-    if (s.sma50 == null || d.close >= s.sma50) return false; // genuinely below the mean = a discount
-    if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > 48) return false; // washed out, not catastrophic
-    return true;
-  });
+  // Cheap technical gate, run as a relaxation LADDER (mirrors the A/B momentum
+  // track): take the STRICT tier if it yields anything, else fall back one notch
+  // to a SHALLOW tier so the section still lights up on a fresh red regime —
+  // where quality names have dipped under the mean but RSI hasn't washed all the
+  // way out yet. Shallow finalists are tagged so the card can flag the lower bar.
+  let oversold = [];
+  for (const tier of DISCOUNT_TIERS) {
+    const hits = enriched
+      .filter((d) => passesDiscountGate(d, tier))
+      .map((d) => ({ ...d, _depth: tier.depth }));
+    if (hits.length > 0) {
+      oversold = hits;
+      break;
+    }
+  }
   if (oversold.length === 0) return [];
 
   // Confirm quality with fundamentals (Yahoo, cheap) — survivors only.
