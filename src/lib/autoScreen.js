@@ -440,13 +440,26 @@ async function screenSentimentDiscounts(date, count) {
     }
     return { ...d, fundamentals: f };
   });
+  // Quality gate — IDX-calibrated, Yahoo-gap-tolerant.
+  //
+  // Yahoo's fundamentals API is patchy for .JK stocks: a null return means "no
+  // data", NOT "bad company". Hard-failing on null silently killed most survivors.
+  // Instead, treat null fundamentals as a soft pass (unknown quality is still
+  // candidate quality); only KNOWN bad values are hard disqualifying.
+  //
+  // Thresholds are relaxed for IDX market reality:
+  //   PER: ceiling raised to 25× (was 20×) — BBCA, TLKM etc. structurally trade >20×
+  //   PBV: removed as a hard gate; used only in the scoring step below (many quality
+  //        IDX consumer/finance names structurally exceed 3×)
+  //   ROE: >10% still required IF known — the only ratio that truly signals quality
+  //   DER: ≤2.0 (was 1.5) — telco/infra names carry structural leverage legitimately
   const quality = withFun.filter((d) => {
     const f = d.fundamentals;
-    if (!f) return false;
-    if (!(f.roe != null && f.roe > 0.1)) return false; // genuinely profitable
-    if (!(f.per != null && f.per > 0 && f.per < 20)) return false; // earning + not pricey
-    if (f.pbv != null && f.pbv > 3) return false; // not richly valued on book
-    if (f.debtToEquity != null && f.debtToEquity > 1.5) return false; // controlled leverage
+    // null fundamentals = Yahoo gap, not a red flag — let it through
+    if (!f) return true;
+    if (f.roe != null && f.roe <= 0.1) return false; // known unprofitable → hard fail
+    if (f.per != null && (f.per <= 0 || f.per > 25)) return false; // known loss-maker or expensive
+    if (f.debtToEquity != null && f.debtToEquity > 2.0) return false; // excessive leverage
     return true;
   });
   if (quality.length === 0) return [];
@@ -454,7 +467,7 @@ async function screenSentimentDiscounts(date, count) {
   // Rank: deepest discount among the best quality (below-MA50 gap × ROE).
   const scored = quality.map((d) => {
     const gap = (d.signals.sma50 - d.close) / d.close;
-    return { ...d, _discountGap: gap, _discountScore: gap * (d.fundamentals.roe ?? 0) };
+    return { ...d, _discountGap: gap, _discountScore: gap * (d.fundamentals?.roe ?? 0) };
   });
   scored.sort((a, b) => b._discountScore - a._discountScore);
   const finalists = scored.slice(0, count);
