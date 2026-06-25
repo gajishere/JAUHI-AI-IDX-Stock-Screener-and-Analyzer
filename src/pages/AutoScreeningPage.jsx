@@ -499,6 +499,124 @@ function DiscountSection({ discounts, ihsg, expandedPlan, onTogglePlan, scanType
   );
 }
 
+// ---- RecognizableRow (Tier D — Likuid & Populer) ----
+function RecognizableRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
+  const t = useT();
+  const s = c.signals ?? {};
+  const liveUp = c.live?.changePct != null && c.live.changePct > 0;
+  const liveDown = c.live?.changePct != null && c.live.changePct < 0;
+  const changeTone = liveUp ? 'text-pos' : liveDown ? 'text-neg' : 'text-ink-muted';
+  const href = `/analysis?ticker=${encodeURIComponent(c.ticker)}&intent=buy&autorun=1`;
+
+  const priceRef = useFlashOnChange(c.live?.last ?? c.close);
+  const changeRef = useFlashOnChange(c.live?.changePct);
+
+  const signals = [];
+  if (s.rsi14 != null) signals.push(`RSI ${Math.round(s.rsi14)}`);
+  if (s.goldenTrend) signals.push(t('uptrend', 'uptrend'));
+  if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
+
+  return (
+    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
+        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
+
+        <div className="min-w-0 flex-1">
+          {/* line 1 — ticker + group + price */}
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              {c.group && (
+                <span className="shrink-0 truncate font-mono text-[10px] uppercase tracking-wide text-brand-strong">{c.group}</span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
+              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              {c.live?.changePct != null && (
+                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+              )}
+            </div>
+          </div>
+
+          {/* line 2 — name + score/rating */}
+          <div className="mt-0.5 flex items-baseline justify-between gap-3">
+            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+              {c.name}
+              {c.capTier && <span> · {c.capTier}</span>}
+              {c.sector && <span> · {c.sector}</span>}
+            </p>
+            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs tabular-nums text-ink-muted">
+              {c.composite != null ? c.composite.toFixed(1) : '—'}
+              <RatingFigure rating={c.overallRating} className="text-sm" />
+            </span>
+          </div>
+
+          {/* line 3 — signal line */}
+          {signals.length > 0 && (
+            <p className="mt-1.5 font-mono text-[11px] text-ink-muted">{signals.join(' · ')}</p>
+          )}
+        </div>
+
+        <RowArrow />
+      </Link>
+
+      <PlanDisclosure
+        id={`recog:${c.ticker}`}
+        label={t('Trading plan', 'Rencana trading')}
+        plan={c.plan ?? null}
+        live={c.live}
+        rvol={c.rvol}
+        lastValueTraded={c.lastValueTraded}
+        scanType={scanType}
+        kind="momentum"
+        expanded={planExpanded}
+        onToggle={onTogglePlan}
+      />
+    </li>
+  );
+}
+
+// ---- RecognizableSection (Tier D — standing, always-on) ----
+function RecognizableSection({ recognizable, expandedPlan, onTogglePlan, scanType }) {
+  const t = useT();
+  const list = Array.isArray(recognizable) ? recognizable : [];
+  if (list.length === 0) return null; // quiet when nothing constructive among the big names
+
+  return (
+    <section className="mt-14">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <h3 className="font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
+            {t('Liquid & familiar', 'Likuid & populer')}
+          </h3>
+          <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+            {t(
+              'Names you actually know — big liquid issuers and listed conglomerate arms — riding a constructive trend, not a one-day spike. The trustworthy counterweight to the momentum movers above.',
+              'Saham yang Anda kenal — emiten besar yang likuid dan anak usaha grup konglomerat — dalam tren yang sehat, bukan lonjakan sehari. Penyeimbang yang lebih terpercaya dari penggerak momentum di atas.',
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
+          {list.map((c, i) => (
+            <RecognizableRow
+              key={`recog-${c.ticker}`}
+              c={c}
+              rank={i + 1}
+              index={i}
+              planExpanded={expandedPlan === `recog:${c.ticker}`}
+              onTogglePlan={onTogglePlan}
+              scanType={scanType}
+            />
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 // ---- StateNotice ----
 function StateNotice({ kind }) {
   const t = useT();
@@ -658,6 +776,16 @@ export default function AutoScreeningPage() {
           </ol>
         )}
       </div>
+
+      {/* Tier D — Likuid & Populer: the recognizable-name counterweight. */}
+      {snapshot?.generatedAt && (
+        <RecognizableSection
+          recognizable={snapshot.recognizable}
+          expandedPlan={expandedPlan}
+          onTogglePlan={togglePlan}
+          scanType={snapshot.scanType}
+        />
+      )}
 
       {/* Tier C — Sentiment Discount: a standing counter-trend section. */}
       {snapshot?.generatedAt && (

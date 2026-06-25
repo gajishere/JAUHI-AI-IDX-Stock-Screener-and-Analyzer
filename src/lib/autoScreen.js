@@ -33,6 +33,13 @@
 //       1.5). On a red IHSG day many quality names qualify; on a strong day the
 //       list is naturally thin or empty (correct — the market isn't discounting).
 //       IHSG's own day change is fetched as context for the section header.
+//   3d. Tier D (Likuid & Populer) — a SEPARATE, always-on recognizable-name track
+//       that counterweights the momentum ladder's gorengan bias (which rewards a
+//       thin-name volume spike). Surfaces names retail actually KNOWS — big liquid
+//       issuers (cap ≥ Rp10T) and listed conglomerate-group arms (any cap) — in a
+//       CONSTRUCTIVE trend (≥ ~MA200, riding/pulling back to MA50, not a blowoff),
+//       with NO RVOL-spike gate. Lifts the JAUHI ≥Rp100T ceiling (that ceiling is
+//       what deletes the most recognizable mega-caps) but keeps JAUHI BANK.
 //   4. Rank   = velocity-first, then composite (the Momentum category's own rank)
 //   5. Live   = for the top `count` finalists only: IDX stock-info (live price/
 //               volume overlay) + as-of-session bandarmology, folded into score   [≤2 IDX req each]
@@ -47,6 +54,7 @@ import { fetchMarketMovers, fetchStockInfo, fetchBandarmology } from './idxApi.j
 import { findEmiten } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory } from './screeningCategories.js';
+import { conglomerateGroup, CONGLOMERATE_TICKERS } from '../data/conglomerates.js';
 import { wibNow, marketStatus, owningScanSlot } from './marketHours.js';
 
 const RANGE = '1y'; // enough history for MA200 / RSI(14)
@@ -500,6 +508,162 @@ async function screenSentimentDiscounts(date, count) {
   return withLive.map((d) => serializeDiscount(d));
 }
 
+// ---- Tier D — Likuid & Populer (recognizable-name setups) ----
+//
+// WHY this track exists: the momentum ladder above rewards an idiosyncratic
+// per-name VOLUME SPIKE (RVOL), which is the gorengan signature — it reliably
+// surfaces thin, obscure names nobody recognizes, on a seasonal pump that's hard
+// to trust. This standing track is the counterweight: it guarantees the page
+// also carries names retail actually KNOWS — Indonesia's big liquid issuers and
+// the listed arms of the major holding groups (Barito, Sinar Mas, Bakrie, …) —
+// when they're in a CONSTRUCTIVE trend rather than a one-day blowoff. No RVOL
+// spike requirement at all; the thesis is structure + liquidity, not velocity.
+//
+// "Recognizable" = a big liquid name (cap ≥ Rp10T) OR a known conglomerate-group
+// member (any cap). Unlike the momentum/discount tracks this deliberately does
+// NOT apply the JAUHI ≥Rp100T ceiling — that ceiling is exactly what deletes the
+// most recognizable mega-caps (TPIA, DSSA, …). JAUHI BANK still holds (the site's
+// locked identity), so banks stay out even though they'd be recognizable.
+
+const RECOG_CAP_FLOOR = 1e13; // ≥ Rp 10T qualifies on size alone (a "big name")
+const RECOG_TURNOVER_FLOOR = 2e10; // ≥ Rp 20B/day today — genuinely liquid (the whole point)
+
+function isRecognizable(d) {
+  if (conglomerateGroup(d.ticker)) return true; // a known holding-group arm
+  return d.marketCap != null && d.marketCap >= RECOG_CAP_FLOOR; // or a big liquid name
+}
+
+// Constructive (NOT gorengan) setup: long-term trend intact (≥ ~MA200), price
+// either riding above MA50 or in a shallow pullback toward it, and not in a
+// blowoff top (RSI ≤ 78). No volume-spike gate — that's the gorengan signal we're
+// deliberately moving away from here.
+function passesRecognizableSetup(d) {
+  const s = d.signals ?? {};
+  if (s.sma200 == null || s.sma50 == null || d.close == null) return false;
+  if (d.close < s.sma200 * 0.95) return false; // long-term trend not broken
+  if (s.rsi14 != null && s.rsi14 > 78) return false; // avoid buying the blowoff
+  const aboveMa50 = d.close >= s.sma50; // uptrend
+  const shallowPullback = d.close >= s.sma50 * 0.88; // healthy dip toward the mean
+  return aboveMa50 || shallowPullback;
+}
+
+// Shape a compact, JSON-safe recognizable-name card for the snapshot.
+function serializeRecognizable(d) {
+  const s = d.signals ?? {};
+  const grp = conglomerateGroup(d.ticker);
+  return {
+    kind: 'recognizable',
+    ticker: d.ticker,
+    name: d.name ?? null,
+    sector: d.sector ?? null,
+    board: d.board ?? null,
+    capTier: d.capTier ?? null,
+    marketCap: d.marketCap ?? null,
+    group: grp?.group ?? null, // conglomerate group label, if any
+    close: d.close ?? null,
+    oneMonth: d.oneMonth ?? null,
+    composite: round(d.composite, 2),
+    overallRating: d.overallRating ?? null,
+    scores: d.scores
+      ? { shortTerm: round(d.scores.shortTerm), midTerm: round(d.scores.midTerm), longTerm: round(d.scores.longTerm) }
+      : null,
+    signals: {
+      rsi14: round(s.rsi14, 1),
+      sma50: round(s.sma50, 2),
+      sma200: round(s.sma200, 2),
+      volumeRatio: round(s.volumeRatio, 2),
+      goldenTrend: !!s.goldenTrend,
+    },
+    rvol: round(d.rvol, 2),
+    lastValueTraded: typeof d.lastValueTraded === 'number' ? Math.round(d.lastValueTraded) : null,
+    plan: d.plan ? {
+      entry: Math.round(d.plan.entry),
+      stop: Math.round(d.plan.stop),
+      t1: Math.round(d.plan.t1),
+      t2: Math.round(d.plan.t2),
+      rr: d.plan.rr != null ? Math.round(d.plan.rr * 10) / 10 : null,
+      atr14Pct: Math.round(d.plan.atr14Pct * 1000) / 1000,
+      swingHigh10: Math.round(d.plan.swingHigh10),
+    } : null,
+    live: d.live
+      ? {
+          last: d.live.last,
+          changePct: d.live.changePct,
+          volume: d.live.volume,
+          value: d.live.value,
+          marketHourStatus: d.live.marketHourStatus,
+        }
+      : null,
+    reason: (() => {
+      const parts = [];
+      parts.push(grp ? grp.group : d.capTier ?? 'Big cap');
+      if (d.lastValueTraded > 0) parts.push(`${Math.round(d.lastValueTraded / 1e9)}B/day`);
+      if (s.rsi14 != null) parts.push(`RSI ${Math.round(s.rsi14)}`);
+      if (s.goldenTrend) parts.push('uptrend');
+      return `Liquid & familiar — ${parts.join(', ')}`;
+    })(),
+  };
+}
+
+// Tier D screener. Seeds from the size-ranked ≥Rp10T universe UNION every known
+// conglomerate-group member (so well-known names below Rp10T still get a look),
+// enriches with charts + the locked score, drops banks / monitored boards, gates
+// on "recognizable + constructive", ranks by the composite (strongest names
+// first), and overlays a live IDX price for the finalists. `exclude` is the set
+// of tickers already surfaced by the momentum/discount tracks, to avoid repeats.
+async function screenRecognizableNames(date, count, exclude = new Set()) {
+  const seedCategory = {
+    ...getCategory('bluechip'),
+    id: 'recognizable-seed',
+    jauhi: false, // keep ≥Rp100T mega-caps AND skip the scan-time bank pre-drop; we drop banks ourselves below
+    capFloor: RECOG_CAP_FLOOR,
+    capCeil: null,
+  };
+  let scan = { shortlist: [] };
+  try {
+    scan = await scanUniverse(date, { count: Math.max(count, 6), category: seedCategory, range: RANGE });
+  } catch {
+    /* fall back to the conglomerate members alone */
+  }
+  const seed = Array.from(
+    new Set([...scan.shortlist.slice(0, 45).map((s) => s.ticker), ...CONGLOMERATE_TICKERS]),
+  );
+
+  const enriched = (
+    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
+  ).filter(Boolean);
+
+  const eligible = enriched.filter(
+    (d) =>
+      !exclude.has(d.ticker) &&
+      !isBankName(d.name) && // JAUHI BANK still holds
+      d.board !== 'Pemantauan Khusus' && // no special-monitoring junk in a "trust" track
+      d.lastValueTraded >= RECOG_TURNOVER_FLOOR &&
+      isRecognizable(d) &&
+      passesRecognizableSetup(d),
+  );
+  if (eligible.length === 0) return [];
+
+  // Strongest, most resilient names first (the locked composite already blends
+  // trend / momentum / value); turnover breaks ties toward the more liquid name.
+  eligible.sort((a, b) => ((b.composite ?? 0) - (a.composite ?? 0)) || ((b.lastValueTraded ?? 0) - (a.lastValueTraded ?? 0)));
+  const finalists = eligible.slice(0, count);
+
+  // Live IDX price overlay for the finalists. Skip bandarmology to stay inside
+  // the request budget — the thesis here is liquidity + structure, not the tape.
+  const withLive = await mapLimit(finalists, LIVE_CONCURRENCY, async (d) => {
+    let live = null;
+    try {
+      live = await fetchStockInfo(d.ticker);
+    } catch {
+      /* best-effort */
+    }
+    return { ...d, live };
+  });
+
+  return withLive.map((d) => serializeRecognizable(d));
+}
+
 // Run one auto-screen. `now` lets callers (and tests) pin the clock; otherwise
 // it's the real time, projected to WIB for the date + scan-type labels.
 export async function autoScreen({ count = 5, now = new Date() } = {}) {
@@ -658,6 +822,15 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
   // resolved above (fetched early for the breadth gate).
   const discounts = await screenSentimentDiscounts(date, count);
 
+  // Tier D (Likuid & Populer) — the standing recognizable-name track. Run last so
+  // its IDX overlay calls don't interleave with the others. Dedup against names
+  // already surfaced by the momentum + discount tracks.
+  const alreadyShown = new Set([
+    ...candidates.map((c) => c.ticker),
+    ...discounts.map((c) => c.ticker),
+  ]);
+  const recognizable = await screenRecognizableNames(date, count, alreadyShown);
+
   const slot = owningScanSlot(now);
   return {
     generatedAt: new Date().toISOString(),
@@ -672,6 +845,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     candidates,
     ihsg,
     discounts,
+    recognizable,
     summary:
       `Seeded ${trendingCodes.length} live movers + ${scanCodes.length} scan names ` +
       `(${seed.length} unique) → ${enriched.length} scored → ${tradable.length} tradable → ` +
@@ -680,6 +854,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
       (relaxedShown > 0 ? ` + ${relaxedShown} relaxed backfill` : '') +
       ` → top ${candidates.length}` +
       `; ${discounts.length} sentiment discount${discounts.length === 1 ? '' : 's'}` +
+      `; ${recognizable.length} liquid & familiar` +
       (ihsg?.changePct != null ? ` (IHSG ${ihsg.changePct >= 0 ? '+' : ''}${ihsg.changePct.toFixed(2)}%)` : '') +
       `.`,
   };
