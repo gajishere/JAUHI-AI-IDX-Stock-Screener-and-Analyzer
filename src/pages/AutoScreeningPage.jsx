@@ -288,6 +288,9 @@ function MoverRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              {c.tier === 'leader' && (
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-ink-muted">{t('trend leader', 'pemimpin tren')}</span>
+              )}
               {c.tier === 'relaxed' && (
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-warn">{t('developing', 'berkembang')}</span>
               )}

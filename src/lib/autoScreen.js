@@ -53,6 +53,17 @@ const RANGE = '1y'; // enough history for MA200 / RSI(14)
 const ENRICH_CONCURRENCY = 5; // Yahoo charts (free, proxied)
 const LIVE_CONCURRENCY = 2; // IDX finalists (the serial 1.2s throttle dominates anyway)
 
+// Breadth-adaptive volume gate (two modes, fixed thresholds per mode). On a
+// GREEN IHSG tape good names rise together on broad beta WITHOUT an idiosyncratic
+// per-name volume spike, so the RVOL bar tuned for a red day starves the list
+// exactly when the market is most generous. We therefore loosen the spike floors
+// when the tape is green and keep the strict bar when it's red. Liquidity floors
+// (turnover) never relax — only the RVOL spike requirement flexes.
+const GATE = {
+  green: { strictRvol: 1.6, relaxedRvol: 1.2 },
+  red: { strictRvol: 2, relaxedRvol: 1.5 },
+};
+
 const isBankName = (name) => /\bbank\b/i.test(name || '');
 
 // ---- lean copies of the screening helpers (kept here so the serverless scan
@@ -194,8 +205,10 @@ function passesDevelopingMomentum(d) {
   );
 }
 
-// Strict picks always rank ahead of relaxed backfill.
-const TIER_RANK = { strict: 0, relaxed: 1 };
+// Tier order: a confirmed spike breakout (strict) ranks ahead of a quiet,
+// no-spike trend leader (leader), which ranks ahead of a developing trend that
+// only backfills empty slots (relaxed).
+const TIER_RANK = { strict: 0, leader: 1, relaxed: 2 };
 
 // Strip the heavy internals and shape a compact, JSON-safe card for the snapshot.
 function serialize(d, category) {
@@ -494,6 +507,10 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
   const date = w.dateStr; // WIB trading date drives the as-of scoring
   const category = getCategory('momentum');
 
+  // IHSG breadth context — kicked off early (one cheap Yahoo chart) so the
+  // volume gate below can adapt to the tape. Also reused for the discount header.
+  const ihsgPromise = fetchIhsgContext(date);
+
   // 1a. Live seed — IDX trending movers (drop banks up front per JAUHI).
   let trending = [];
   try {
@@ -532,22 +549,45 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     return true;
   });
 
-  // Tier A (strict): a real 2× volume spike + Rp10M turnover + full Momentum match.
-  const strict = tradable.filter(
-    (d) => d.lastValueTraded >= 1e10 && d.rvol >= 2 && matchesCategory(category, d),
-  );
+  // Breadth mode: green tape loosens the RVOL spike floors, red keeps them strict.
+  const ihsg = await ihsgPromise;
+  const greenTape = ihsg?.changePct != null && ihsg.changePct >= 0;
+  const gate = greenTape ? GATE.green : GATE.red;
 
-  // Tier B (relaxed): ONLY to backfill when Tier A can't fill `count`. Softer
-  // money/spike floors (Rp5M / 1.5×) + a developing (price > MA50) trend.
+  // Tier A (strict): a real volume spike + Rp10M turnover + full Momentum match.
+  const strict = tradable.filter(
+    (d) => d.lastValueTraded >= 1e10 && d.rvol >= gate.strictRvol && matchesCategory(category, d),
+  );
   let pool = strict.map((d) => ({ ...d, tier: 'strict' }));
+
+  // Tier "leader" (quiet trend, NO spike): a full Momentum match (golden 50/200
+  // stack + volume ≥ avg + a strength signal) that simply didn't spike on volume.
+  // This is the bulk of a broad-green tape — good names rising together on beta
+  // rather than on an idiosyncratic spike. Liquid (Rp10M turnover) but free of the
+  // RVOL requirement. Only fires to fill `count` after the strict spikes.
   if (pool.length < count) {
-    const strictSet = new Set(strict.map((d) => d.ticker));
+    const taken = new Set(pool.map((d) => d.ticker));
+    const leaders = tradable
+      .filter(
+        (d) =>
+          !taken.has(d.ticker) &&
+          d.lastValueTraded >= 1e10 &&
+          matchesCategory(category, d),
+      )
+      .map((d) => ({ ...d, tier: 'leader' }));
+    pool = [...pool, ...leaders];
+  }
+
+  // Tier B (relaxed): last-resort backfill. Softer money floor (Rp5M) + a softened
+  // spike floor + a DEVELOPING (price > MA50, not the full stack) trend.
+  if (pool.length < count) {
+    const taken = new Set(pool.map((d) => d.ticker));
     const relaxed = tradable
       .filter(
         (d) =>
-          !strictSet.has(d.ticker) &&
+          !taken.has(d.ticker) &&
           d.lastValueTraded >= 5e9 &&
-          d.rvol >= 1.5 &&
+          d.rvol >= gate.relaxedRvol &&
           passesDevelopingMomentum(d),
       )
       .map((d) => ({ ...d, tier: 'relaxed' }));
@@ -610,14 +650,13 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     return (b.composite ?? 0) - (a.composite ?? 0);
   });
   const candidates = withLive.map((d) => serialize(d, category));
+  const leaderShown = candidates.filter((c) => c.tier === 'leader').length;
   const relaxedShown = candidates.filter((c) => c.tier === 'relaxed').length;
 
-  // Tier C (Sentiment Discount) + IHSG context — the standing counter-trend
-  // track, run after the momentum overlay so their IDX calls don't interleave.
-  const [ihsg, discounts] = await Promise.all([
-    fetchIhsgContext(date),
-    screenSentimentDiscounts(date, count),
-  ]);
+  // Tier C (Sentiment Discount) — the standing counter-trend track, run after the
+  // momentum overlay so its IDX calls don't interleave. IHSG context already
+  // resolved above (fetched early for the breadth gate).
+  const discounts = await screenSentimentDiscounts(date, count);
 
   const slot = owningScanSlot(now);
   return {
@@ -636,7 +675,8 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     summary:
       `Seeded ${trendingCodes.length} live movers + ${scanCodes.length} scan names ` +
       `(${seed.length} unique) → ${enriched.length} scored → ${tradable.length} tradable → ` +
-      `${strict.length} strict` +
+      `${strict.length} strict (${greenTape ? 'green' : 'red'} tape)` +
+      (leaderShown > 0 ? ` + ${leaderShown} trend leader` : '') +
       (relaxedShown > 0 ? ` + ${relaxedShown} relaxed backfill` : '') +
       ` → top ${candidates.length}` +
       `; ${discounts.length} sentiment discount${discounts.length === 1 ? '' : 's'}` +
