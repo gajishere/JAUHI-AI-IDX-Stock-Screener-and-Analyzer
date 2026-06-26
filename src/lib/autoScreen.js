@@ -383,14 +383,21 @@ function serializeDiscount(d) {
   };
 }
 
+// Liquidity floor for the discount track — its OWN bar, far below the momentum
+// track's Rp10B/day. Momentum surfaces ACTIVE names; oversold quality drifts THIN
+// while it pulls back below the mean, so the Rp10B floor excluded 33 of 45 seeds
+// (the funnel's dominant reject reason, and the real cause of the empty section).
+// A ≥Rp1T blue chip is genuinely tradable for retail at Rp2B/day.
+const DISCOUNT_MIN_TURNOVER = 2e9; // Rp 2B/day
+
 // Technical gate for the discount track, parameterized so the relaxation ladder
 // can reuse it. `ma200Mult` is the falling-knife floor (close ≥ MA200 × mult),
 // `bandMult` widens the "below the mean" band (close < MA50 × mult), `rsiCeil`
-// caps how un-washed-out a name may still be. Liquidity/cap floors never relax.
+// caps how un-washed-out a name may still be. The cap floor never relaxes.
 function passesDiscountGate(d, { rsiCeil, ma200Mult, bandMult }) {
   const s = d.signals ?? {};
   if (d.marketCap == null || d.marketCap < 1e12) return false; // ≥ Rp1T
-  if (d.lastValueTraded < 1e10) return false; // still tradable today
+  if (d.lastValueTraded < DISCOUNT_MIN_TURNOVER) return false; // tradable — its own low bar
   if (s.sma200 == null || d.close == null) return false;
   if (d.close < s.sma200 * ma200Mult) return false; // trend NOT broken (falling-knife guard)
   if (s.sma50 == null || d.close >= s.sma50 * bandMult) return false; // below the mean = a discount
@@ -461,7 +468,7 @@ async function screenSentimentDiscounts(date, count) {
   const st = DISCOUNT_TIERS[0];
   for (const d of enriched) {
     const s = d.signals ?? {};
-    if (d.marketCap == null || d.marketCap < 1e12 || d.lastValueTraded < 1e10) { funnel.reasons.liq++; continue; }
+    if (d.marketCap == null || d.marketCap < 1e12 || d.lastValueTraded < DISCOUNT_MIN_TURNOVER) { funnel.reasons.liq++; continue; }
     if (s.sma200 == null || s.sma50 == null || d.close == null) { funnel.reasons.noMa++; continue; }
     if (d.close < s.sma200 * st.ma200Mult) { funnel.reasons.ma200++; continue; } // trend broken (falling knife)
     if (d.close >= s.sma50 * st.bandMult) { funnel.reasons.ma50++; continue; } // not below the mean (no discount)
