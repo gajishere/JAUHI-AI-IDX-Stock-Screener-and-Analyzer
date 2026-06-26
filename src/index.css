@@ -2003,3 +2003,33 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== Mobile GPU budget (landing decoration) =====
+   On phones, large `filter: blur()` layers + `mix-blend-mode` stack into a
+   texture-memory blowout that drops the whole compositor layer tree — the page
+   renders fine until the last heavy layer (the closing-CTA glow at the bottom)
+   scrolls into view, then it goes BLANK until reload. Desktop GPUs absorb it;
+   small ones don't. So on ≤767px we shed the heaviest decoration; the static
+   woven lines + cosmic backdrop keep the landing alive, just calmer. `.glow-orb`
+   carries the orb blur in CSS (not inline) so it can shrink here. Top-level
+   (unlayered) so it reliably overrides the @layer-components base rules. */
+.glow-orb {
+  filter: blur(26px);
+}
+
+@media (max-width: 767px) {
+  .glow-orb {
+    filter: blur(14px);
+  }
+  /* Drop the two blurred + blend-mode light-sweeps entirely on mobile. */
+  .bg-paths-glint {
+    display: none;
+  }
+  /* Plain compositing for the starfield — blend modes are a common mobile
+     blank-screen trigger. The blend lives on the star pseudo-layers, not the
+     element, so target those. */
+  .cosmic-stars::before,
+  .cosmic-stars::after {
+    mix-blend-mode: normal;
+  }
+}

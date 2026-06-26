@@ -52,11 +52,10 @@ function Hero() {
       {/* decorative orb glow over the paths — brand green + signal blue, soft */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[-10%] h-[42rem] w-[42rem] -translate-x-1/2 rounded-full opacity-70 motion-reduce:opacity-50"
+        className="glow-orb pointer-events-none absolute left-1/2 top-[-10%] h-[28rem] w-[28rem] -translate-x-1/2 rounded-full opacity-70 motion-reduce:opacity-50 sm:h-[42rem] sm:w-[42rem]"
         style={{
           background:
             'radial-gradient(closest-side, color-mix(in srgb, var(--c-brand) 22%, transparent), color-mix(in srgb, var(--c-info) 12%, transparent) 55%, transparent 72%)',
-          filter: 'blur(28px)',
         }}
       />
       <div className="relative z-10 mx-auto max-w-3xl px-5 pb-20 pt-20 text-center sm:px-6 sm:pb-28 sm:pt-28">
@@ -260,11 +259,10 @@ function ClosingCTA() {
     <section className="full-bleed relative mt-24 overflow-hidden py-20">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 -z-0 h-[30rem] w-[60rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60"
+        className="glow-orb pointer-events-none absolute left-1/2 top-1/2 -z-0 h-[20rem] w-[38rem] max-w-[140vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 sm:h-[30rem] sm:w-[60rem]"
         style={{
           background:
             'radial-gradient(closest-side, color-mix(in srgb, var(--c-brand) 20%, transparent), color-mix(in srgb, var(--c-info) 10%, transparent) 55%, transparent 74%)',
-          filter: 'blur(34px)',
         }}
       />
       <div ref={revealRef} className="relative mx-auto max-w-xl px-5 text-center sm:px-6">
