@@ -98,7 +98,7 @@ function App() {
                 'Catatan riset dihasilkan dari data pasar real-time dan bukan merupakan nasihat investasi.',
               )}
             </p>
-            <p className="text-xs text-ink-muted shrink-0">JAUHI AI Version 3.5</p>
+            <p className="text-xs text-ink-muted shrink-0">JAUHI AI Version 4.0</p>
           </div>
         </div>
       </footer>
