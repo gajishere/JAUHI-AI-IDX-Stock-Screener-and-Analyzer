@@ -425,19 +425,48 @@ async function screenSentimentDiscounts(date, count) {
     capFloor: 1e12, // ≥ Rp 1T (quality scale)
     capCeil: null,
   };
+  // Funnel diagnostic: how many names survive each stage, and — for the names
+  // the STRICT tier rejects — WHY. Surfaced in the snapshot summary so an empty
+  // section is explainable at a glance (seed too thin? trend broken below MA200?
+  // not actually below MA50? RSI crashed past 30?) instead of a silent zero.
+  const funnel = {
+    seed: 0,
+    enriched: 0,
+    technical: 0,
+    depth: null,
+    quality: 0,
+    final: 0,
+    // strict-tier rejection reasons (each name counted once, first failure wins)
+    reasons: { liq: 0, noMa: 0, ma200: 0, ma50: 0, rsi: 0 },
+  };
+
   let scan;
   try {
     scan = await scanUniverse(date, { count, category: seedCategory, range: RANGE });
   } catch {
-    return [];
+    return { cards: [], funnel };
   }
   const seed = scan.shortlist.slice(0, 45).map((s) => s.ticker);
+  funnel.seed = seed.length;
 
   // Enrich (chart + locked score). Fundamentals are fetched later, only for the
   // technical survivors, to keep the request budget tight.
   const enriched = (
     await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
   ).filter(Boolean);
+  funnel.enriched = enriched.length;
+
+  // Tally why the STRICT tier rejects each enriched name (same conditions as
+  // passesDiscountGate, in order, so the first failure is the dominant reason).
+  const st = DISCOUNT_TIERS[0];
+  for (const d of enriched) {
+    const s = d.signals ?? {};
+    if (d.marketCap == null || d.marketCap < 1e12 || d.lastValueTraded < 1e10) { funnel.reasons.liq++; continue; }
+    if (s.sma200 == null || s.sma50 == null || d.close == null) { funnel.reasons.noMa++; continue; }
+    if (d.close < s.sma200 * st.ma200Mult) { funnel.reasons.ma200++; continue; } // trend broken (falling knife)
+    if (d.close >= s.sma50 * st.bandMult) { funnel.reasons.ma50++; continue; } // not below the mean (no discount)
+    if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > st.rsiCeil) { funnel.reasons.rsi++; continue; } // RSI out of the washed-but-not-crashed band
+  }
 
   // Cheap technical gate, run as a relaxation LADDER (mirrors the A/B momentum
   // track): take the STRICT tier if it yields anything, else fall back one notch
@@ -454,7 +483,9 @@ async function screenSentimentDiscounts(date, count) {
       break;
     }
   }
-  if (oversold.length === 0) return [];
+  funnel.technical = oversold.length;
+  funnel.depth = oversold[0]?._depth ?? null;
+  if (oversold.length === 0) return { cards: [], funnel };
 
   // Confirm quality with fundamentals (Yahoo, cheap) — survivors only.
   const withFun = await mapLimit(oversold, ENRICH_CONCURRENCY, async (d) => {
@@ -488,7 +519,8 @@ async function screenSentimentDiscounts(date, count) {
     if (f.debtToEquity != null && f.debtToEquity > 2.0) return false; // excessive leverage
     return true;
   });
-  if (quality.length === 0) return [];
+  funnel.quality = quality.length;
+  if (quality.length === 0) return { cards: [], funnel };
 
   // Rank: deepest discount among the best quality (below-MA50 gap × ROE).
   const scored = quality.map((d) => {
@@ -510,7 +542,8 @@ async function screenSentimentDiscounts(date, count) {
     return { ...d, live };
   });
 
-  return withLive.map((d) => serializeDiscount(d));
+  funnel.final = withLive.length;
+  return { cards: withLive.map((d) => serializeDiscount(d)), funnel };
 }
 
 // ---- Tier D — Likuid & Populer (recognizable-name setups) ----
@@ -824,8 +857,9 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
 
   // Tier C (Sentiment Discount) — the standing counter-trend track, run after the
   // momentum overlay so its IDX calls don't interleave. IHSG context already
-  // resolved above (fetched early for the breadth gate).
-  const discounts = await screenSentimentDiscounts(date, count);
+  // resolved above (fetched early for the breadth gate). Returns the cards plus a
+  // funnel diagnostic (seed → technical → quality + strict-tier reject reasons).
+  const { cards: discounts, funnel: discountFunnel } = await screenSentimentDiscounts(date, count);
 
   // Tier D (Likuid & Populer) — the standing recognizable-name track. Run last so
   // its IDX overlay calls don't interleave with the others. Dedup against names
@@ -835,6 +869,17 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     ...discounts.map((c) => c.ticker),
   ]);
   const recognizable = await screenRecognizableNames(date, count, alreadyShown);
+
+  // Human-readable discount funnel for the summary line — makes an empty section
+  // self-explanatory (where did the names drop?) instead of a silent zero.
+  const df = discountFunnel;
+  const discountReport =
+    `${discounts.length} sentiment discount${discounts.length === 1 ? '' : 's'}` +
+    ` [seed ${df.seed}→tech ${df.technical}${df.depth ? ` ${df.depth}` : ''}→qual ${df.quality}` +
+    (df.technical === 0
+      ? `; rejects: MA200-broken ${df.reasons.ma200}, not-below-MA50 ${df.reasons.ma50}, RSI-off ${df.reasons.rsi}, illiquid ${df.reasons.liq}`
+      : '') +
+    `]`;
 
   const slot = owningScanSlot(now);
   return {
@@ -850,6 +895,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     candidates,
     ihsg,
     discounts,
+    discountFunnel,
     recognizable,
     summary:
       `Seeded ${trendingCodes.length} live movers + ${scanCodes.length} scan names ` +
@@ -858,7 +904,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
       (leaderShown > 0 ? ` + ${leaderShown} trend leader` : '') +
       (relaxedShown > 0 ? ` + ${relaxedShown} relaxed backfill` : '') +
       ` → top ${candidates.length}` +
-      `; ${discounts.length} sentiment discount${discounts.length === 1 ? '' : 's'}` +
+      `; ${discountReport}` +
       `; ${recognizable.length} liquid & familiar` +
       (ihsg?.changePct != null ? ` (IHSG ${ihsg.changePct >= 0 ? '+' : ''}${ihsg.changePct.toFixed(2)}%)` : '') +
       `.`,
