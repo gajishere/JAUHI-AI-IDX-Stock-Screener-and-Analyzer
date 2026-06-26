@@ -12,7 +12,10 @@
 
 const VARIANT_CLASS = {
   surface: 'glass-surface',
-  accent: 'glass-accent',
+  // The primary CTA also wears `.glow-ring` (the rotating brand→info glowing
+  // border + bloom), so every `variant="accent"` action matches the landing's
+  // glowing primary button — same effect PrimaryButton (report.jsx) carries.
+  accent: 'glow-ring glass-accent',
   card: 'glass-card',
 };
 

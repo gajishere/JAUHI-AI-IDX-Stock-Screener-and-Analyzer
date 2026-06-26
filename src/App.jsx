@@ -1,25 +1,34 @@
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import ApiStatusPage from './pages/ApiStatusPage';
 import AutoScreeningPage from './pages/AutoScreeningPage';
+import LandingPage from './pages/LandingPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import StockScreeningPage from './pages/StockScreeningPage';
 import { NavMenu } from './components/NavMenu';
 import { SettingsMenu } from './components/SettingsMenu';
 import { GlassFilter } from './components/LiquidGlass';
+import CosmicBackdrop from './components/CosmicBackdrop';
 import Logo from './components/Logo';
 import { useT } from './lib/i18n';
 
 function App() {
   const t = useT();
   const location = useLocation();
-  // The live auto-screener is the default landing page (route '/').
-  const isAutoPage = location.pathname === '/' || location.pathname === '/auto-screening';
+  // The marketing landing page is the front door (route '/'); the live
+  // auto-screener now lives at its own '/auto-screening' route.
+  const isLandingPage = location.pathname === '/';
+  const isAutoPage = location.pathname === '/auto-screening';
   const isAnalysisPage = location.pathname === '/analysis';
   const isScreeningPage = location.pathname === '/screening';
   const isApiStatusPage = location.pathname === '/api-status';
 
   return (
-    <div className="flex min-h-screen flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <>
+    {/* Cosmoq starfield + aurora — kept OUTSIDE the overflow-x-clip wrapper below
+        so the fixed deep-space layer always spans the full viewport (the clip would
+        otherwise crop it at the scrollbar gutter). */}
+    <CosmicBackdrop />
+    <div className="flex min-h-screen flex-col overflow-x-clip pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       {/* Single shared refraction filter for every liquid-glass surface. */}
       <GlassFilter />
       <header className="border-b border-line">
@@ -34,15 +43,21 @@ function App() {
               nudge centres the icons on the wordmark's cap band rather than its
               full line box. */}
           <div className="mt-2.5 flex items-start justify-between gap-4">
-            <h1 className="flex min-w-0 items-start gap-3 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
-              <Logo className="mt-1 h-5 w-auto shrink-0 sm:mt-[3px] sm:h-6" />
-              <span className="min-w-0">
-                {t('IDX Stock Analysis', 'Analisis Saham IDX')}{' '}
-                <span className="font-normal italic text-ink-muted">&</span>{' '}
-                {t('Screening', 'Penyaringan')}
-              </span>
+            <h1 className="display min-w-0 font-serif text-2xl font-medium tracking-tight sm:text-3xl">
+              <Link
+                to="/"
+                className="tactile-soft flex min-w-0 items-start gap-3 rounded-md"
+                aria-label={t('IDX Stock Analysis & Screening — home', 'Analisis & Penyaringan Saham IDX — beranda')}
+              >
+                <Logo className="mt-1 h-5 w-auto shrink-0 sm:mt-[3px] sm:h-6" />
+                <span className="min-w-0">
+                  {t('IDX Stock Analysis', 'Analisis Saham IDX')}{' '}
+                  <span className="font-normal italic text-ink-muted">&</span>{' '}
+                  {t('Screening', 'Penyaringan')}
+                </span>
+              </Link>
             </h1>
-            <div className="-mt-1 flex shrink-0 items-center gap-2 sm:-mt-1.5">
+            <div className="-mt-1 flex shrink-0 items-center gap-2.5 sm:-mt-1.5">
               <NavMenu />
               <SettingsMenu />
             </div>
@@ -57,6 +72,9 @@ function App() {
             /screening; everything else (including the default route) shows
             Analysis. `hidden` is display:none, so the inactive tab also leaves
             the accessibility tree and tab order. */}
+        <div className="route-panel" hidden={!isLandingPage}>
+          <LandingPage />
+        </div>
         <div className="route-panel" hidden={!isAutoPage}>
           <AutoScreeningPage />
         </div>
@@ -85,6 +103,7 @@ function App() {
         </div>
       </footer>
     </div>
+    </>
   );
 }
 

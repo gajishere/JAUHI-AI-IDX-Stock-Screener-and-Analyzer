@@ -145,12 +145,22 @@ export async function scanUniverse(
     const nearHigh = high1y > 0 ? price / high1y : 0;
     const sizeBias = cap ? Math.min(Math.log10(cap) / 14, 1) : 0;
 
-    // Two ranking modes. 'momentum' floats fast movers with clean structure to
+    // Three ranking modes. 'momentum' floats fast movers with clean structure to
     // the top (Penny / Momentum). 'size' ranks by scale + proximity to highs —
     // used by fundamental + blue-chip screens, which have no fundamental signal
-    // at Tier 1, so they enrich the larger, more-tradable names first.
+    // at Tier 1, so they enrich the larger, more-tradable names first. 'pullback'
+    // is the INVERSE of size's near-high bias: it surfaces quality names that have
+    // dropped BELOW their recent highs / are down on the month, which is exactly
+    // the seed the Sentiment-Discount track needs (a size/near-high seed starves
+    // it, since discounted names are by definition far from their highs). A mild
+    // size bias keeps the pool to liquid quality names, not broken micro-caps; the
+    // downstream MA200 floor drops any genuine falling knives.
     let scanScore;
-    if (category.tier1 === 'size') {
+    if (category.tier1 === 'pullback') {
+      const drawdown = 1 - nearHigh; // 0 at the high → ~1 deep below it
+      const monthDown = Math.max(0, -(r1m ?? 0)); // only negative 1M returns count
+      scanScore = drawdown * 1.6 + Math.min(monthDown, 0.4) * 1.2 + sizeBias * 0.5;
+    } else if (category.tier1 === 'size') {
       scanScore = sizeBias * 2 + nearHigh * 0.5;
     } else {
       scanScore =

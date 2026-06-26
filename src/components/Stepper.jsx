@@ -4,7 +4,7 @@ import { useT } from '../lib/i18n';
 export function Stepper({ steps, current }) {
   const t = useT();
   return (
-    <ol className="mx-auto flex items-center justify-center gap-2 sm:gap-3" aria-label={t('Progress', 'Progres')}>
+    <ol className="glass-surface mx-auto flex w-fit items-center justify-center gap-2 rounded-full px-3 py-2 sm:gap-3" aria-label={t('Progress', 'Progres')}>
       {steps.map((label, i) => {
         const step = i + 1;
         const state = step < current ? 'done' : step === current ? 'active' : 'todo';
@@ -21,7 +21,7 @@ export function Stepper({ steps, current }) {
                     ? 'scale-105 bg-brand text-on-brand'
                     : state === 'done'
                       ? 'bg-pos-tint text-pos'
-                      : 'bg-well text-ink-muted'
+                      : 'bg-well/70 text-ink-muted'
                 }`}
                 style={{
                   transitionTimingFunction: 'var(--spring-settle)',

@@ -57,9 +57,9 @@ export function Row({ label, value, tone }) {
 
 export function Section({ title, aside, children }) {
   return (
-    <section className="mt-8 border-t border-line pt-6 first:mt-0 first:border-t-0 first:pt-0">
+    <section className="tool-section">
       <div className="mb-3 flex items-center justify-between gap-4">
-        <h3 className="font-serif text-xl font-medium">{title}</h3>
+        <h3 className="display font-serif text-xl font-medium tracking-tight">{title}</h3>
         {aside}
       </div>
       {children}
@@ -77,7 +77,7 @@ export function Pill({ children, tone = 'info', className = '' }) {
     muted: 'bg-well text-ink-muted',
   };
   return (
-    <span className={`spring-color inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]} ${className}`}>
+    <span className={`spring-color inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-current/10 ${tones[tone]} ${className}`}>
       {children}
     </span>
   );
@@ -89,7 +89,7 @@ export function PrimaryButton({ children, disabled, loading, type = 'button', on
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className="glass-accent tactile-deep inline-flex min-h-11 items-center gap-2 px-6 py-2.5 text-sm font-medium hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+      className="glow-ring glass-accent tactile-deep inline-flex min-h-11 items-center gap-2 px-6 py-2.5 text-sm font-medium hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
     >
       {loading && (
         <span
@@ -153,10 +153,10 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
           setDragging(false);
           addFiles(e.dataTransfer.files);
         }}
-        className={`tactile flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-7 text-center text-sm focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
+        className={`tactile tool-panel-soft flex cursor-pointer flex-col items-center justify-center gap-2 border-dashed px-4 py-7 text-center text-sm focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25 ${
           dragging
             ? 'border-brand bg-brand-tint/70 text-ink scale-[1.01]'
-            : 'border-line bg-well/40 text-ink-muted hover:-translate-y-px hover:border-ink-muted/60 hover:bg-well/70'
+            : 'text-ink-muted hover:-translate-y-px hover:border-ink-muted/60'
         }`}
       >
         <svg
@@ -189,7 +189,7 @@ export function BrokerScreenshotField({ id, files, onAdd, onRemove }) {
           {files.map((file, index) => (
             <li
               key={`${file.name}:${file.size}`}
-              className="list-item-enter flex items-center justify-between gap-3 rounded-md bg-well/60 px-3 py-1.5 text-xs"
+              className="list-item-enter flex items-center justify-between gap-3 rounded-full border border-line/70 bg-well/50 px-3 py-1.5 text-xs"
               style={{ '--i': index }}
             >
               <span className="flex min-w-0 items-baseline gap-2">

@@ -42,19 +42,19 @@ colors:
   warn-tint: "#fbf2dd"
 typography:
   display:
-    fontFamily: "Newsreader, Georgia, Cambria, serif"
+    fontFamily: "Inter, system-ui, sans-serif"
     fontSize: "2.25rem"
-    fontWeight: 500
-    lineHeight: 1.1
-    letterSpacing: "-0.02em"
+    fontWeight: 600
+    lineHeight: 1.04
+    letterSpacing: "-0.035em"
   title:
-    fontFamily: "Newsreader, Georgia, Cambria, serif"
+    fontFamily: "Inter, system-ui, sans-serif"
     fontSize: "1.25rem"
     fontWeight: 500
     lineHeight: 1.3
-    letterSpacing: "normal"
+    letterSpacing: "-0.02em"
   body:
-    fontFamily: "IBM Plex Sans, system-ui, sans-serif"
+    fontFamily: "Inter, system-ui, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.55
@@ -117,9 +117,11 @@ This is a quiet research desk that happens to read the live order flow. It carri
 
 The surface comes in two ambient settings. **Day** is a pure-white reading room; **Night** is a near-black trading floor (`#0d0f12`). The same tokens carry both — the user flips them from the gear in the top-right, the choice follows the OS by default and persists. Color is always a verdict, never decoration: a number is green because it went up, red because it went down, amber because it's a hold — never because green is pretty.
 
+Behind it all sits one atmospheric layer, the **cosmic backdrop** (a Cosmoq-inspired addition): a fixed starfield + slowly drifting brand/info aurora, pinned behind every page over the `--canvas` ground. It is the *faintest* whisper on the Day reading room (stars at ~5% ink dust, aurora a hair of green/blue) so paper still reads as paper, and opens into a real deep-space look at Night. It is pure decoration that never touches the content layer or legibility — the one place this desk allows atmosphere for its own sake. See §4.
+
 One deliberate exception to the desk's restraint: the **floating chrome** — every modal, popover, the settings menu, both date calendars, and the primary/secondary action buttons — is rendered in an Apple-style **Liquid Glass** material (frosted, lightly refractive, theme-aware). This is a *scoped* choice, never a default coat: the reading layer (reports, dotted-leader rows, data) stays opaque and screenshot-legible. Glass lives only where the eye expects a surface to float above the page. See §4.
 
-What this system explicitly rejects: **Bloomberg-terminal clutter** (wall-to-wall density, ALL-CAPS shouting, ten colors fighting), **crypto-hype aesthetics** (neon glows, gamified urgency), and **generic indigo SaaS dashboard** templates. If a screen starts to feel like any of those, it has drifted.
+What this system explicitly rejects: **Bloomberg-terminal clutter** (wall-to-wall density, ALL-CAPS shouting, ten colors fighting), **crypto-hype aesthetics** (rainbow neon, gamified urgency, gradient text), and **generic indigo SaaS dashboard** templates. If a screen starts to feel like any of those, it has drifted. (The Cosmoq pass adds a tightly-scoped atmosphere — Inter display type, a faint cosmic backdrop, and one in-brand glowing CTA — documented in §3–§5; these are the *only* sanctioned departures from the original ink-and-paper restraint.)
 
 **Key Characteristics:**
 - Literate, authored feel — the page reads like research, not a feed.
@@ -164,16 +166,16 @@ A near-monochrome ink-and-paper base with exactly one identity color (green) and
 
 ## 3. Typography
 
-**Display Font:** Newsreader (serif), with Georgia / Cambria fallback.
-**Body Font:** IBM Plex Sans, with system-ui fallback.
+**Display Font:** Inter, with system-ui fallback. Optical sizing on, deep negative tracking.
+**Body Font:** Inter, with system-ui fallback.
 **Label/Mono Font:** IBM Plex Mono, with ui-monospace fallback.
 
-**Character:** A literary serif paired on a true contrast axis with a clean humanist sans and a precise monospace. The serif gives the masthead and report headings their authored, equity-research voice; the sans keeps the working UI quiet; the mono makes every figure line up. Three families, three jobs, no overlap.
+**Character:** Inter is the next-gen tech-product voice the desk adopted from the Cosmoq pass — a clean grotesque-humanist sans set *large with deep negative tracking* for the mastheads (the headings' whole punch comes from the size + tracking, not from a serif's contrast), and quiet at body size for the working UI. The one true contrast axis that remains is against **IBM Plex Mono**, which still carries every figure so columns line up. Two families, two jobs: Inter does the reading + display work, the mono does the data work. (Historical note: the masthead was previously Newsreader serif; the `font-serif` Tailwind alias is kept but now resolves to Inter, so existing heading call sites didn't have to change.)
 
 ### Hierarchy
-- **Display** (Newsreader 500, 1.5rem–2.25rem, line-height ~1.1, tracking `-0.02em`): the masthead and the big report/stage headings ("Candidates ready"), plus the large rating figures. Fixed rem scale — never fluid `clamp()`; a sidebar-shrinking headline looks worse, not better.
-- **Title** (Newsreader 500, 1.25rem): section headings inside a report. Sentence case, always.
-- **Body** (IBM Plex Sans 400/500, 0.875rem, line-height ~1.55): UI copy, labels, descriptions, buttons. Prose caps at `max-w-prose` (≈65ch).
+- **Display** (Inter 600, 1.5rem–2.25rem, line-height ~1.04, tracking `-0.035em` via `.display`; the big hero headings use `.display-xl` — 700, `-0.04em`): the masthead and the big report/stage headings ("Candidates ready"), plus the large rating figures. Fixed rem scale — never fluid `clamp()`; a sidebar-shrinking headline looks worse, not better. The deep tracking is the Cosmoq signature — generic Inter at default tracking reads as a template.
+- **Title** (Inter 500, 1.25rem, tracking `-0.02em`): section headings inside a report. Sentence case, always.
+- **Body** (Inter 400/500, 0.875rem, line-height ~1.55): UI copy, labels, descriptions, buttons. Prose caps at `max-w-prose` (≈65ch).
 - **Label / Figure** (IBM Plex Mono 500, 0.75rem): kickers, prices, dates, scores, tickers — always with `tabular-nums` so columns align. Kickers are lowercase mono ("closing screen · as of 2026-06-15").
 
 ### Named Rules
@@ -218,6 +220,23 @@ An Apple-style frosted, lightly refractive material for the layers that float ab
 
 **Graceful degradation is mandatory.** Under `@supports not (backdrop-filter)` or `prefers-reduced-transparency: reduce`, every glass surface falls back to an **opaque** fill (no blur, no refraction) so nothing becomes unreadable. Reduced-motion is handled globally.
 
+### Cosmic Backdrop — atmosphere behind everything (Cosmoq)
+
+A fixed two-layer atmosphere mounted once by `<CosmicBackdrop/>` (like the shared `GlassFilter`) and pinned at `z-index: -1` behind all content, over the `--canvas` ground. It is the desk's one purely-decorative layer — it never touches the reading layer, never carries meaning, and stays subtle enough that the page still reads as a research desk, not a hero template.
+
+- **`.cosmic-stars`** — a tiling radial-dot starfield that slowly twinkles (opacity 7s). Dot color + opacity are theme tokens.
+- **`.cosmic-aurora`** — two-to-three soft brand-green + signal-blue radial blobs that drift (`transform` 26s, alternating). Brand/info only — never a foreign hue.
+
+**Backdrop tokens** (theme-aware, in `:root` / `.dark`):
+- **`--star-rgb` / `--star-opacity`** — `22 24 28` @ `0.05` (day, ink dust barely there) / `255 255 255` @ `0.55` (night, bright white).
+- **`--aurora-brand` / `--aurora-info`** — aurora strengths: `0.06 / 0.05` (day) / `0.12 / 0.10` (night).
+
+Both layers are pure transform/opacity (GPU-composited, zero scroll cost) and freeze under reduced-motion while the atmosphere itself stays. This is the **scoped exception** to the No-Decoration Rule (§5): it is allowed *because* it is behind everything, costs nothing, and never competes with the data.
+
+### Glowing CTA Ring (`.glow-ring`, Cosmoq signature)
+
+The primary action carries Cosmoq's signature: a conic light ring that rotates around the pill (`glow-ring-spin` 4s), masked to a thin rim with a soft outer bloom. Re-hued to the desk's **own** identity — brand green → signal blue → brand-strong, never Cosmoq's blue/gold — so it reads as the most alive thing on screen without importing a foreign palette. It composes *over* `.glass-accent` (the green fill, on-brand text, and decisive-green rule all still hold) and uses `@property --glow-angle` so the angle tweens smoothly. Freezes under reduced-motion. This is a deliberate, scoped relaxation of the old "no neon glow" line — confined to the single primary CTA, in-brand, on chrome only.
+
 ### Named Rules
 **The Glass-On-Chrome-Only Rule.** Liquid Glass is for layers that float *above* the page — modals, popovers, calendars, action buttons. It is **forbidden** on the reading layer: reports, dotted-leader rows, the verdict card, data tables. Coating data in glass breaks WCAG AA and the screenshot-ready identity. If content is behind glass, it's wrong.
 
@@ -244,6 +263,8 @@ Motion here reads as native iOS, not as a web approximation of it. Five principl
 - **Spring durations** (`--spring-*-dur`): the matching ms values, so a CSS `transition-duration` and a WAAPI `duration` never drift apart.
 - **`.tactile` / `.tactile-soft` / `.tactile-deep`**: the press affordances (§5.2). Apply to any click target that should read as a physical button.
 - **`.ios-scroll`**: contained, momentum-scrolling container. Pair with `useElasticScroll()` where touch rubber-banding is wanted.
+- **`useScrollReveal()`** (`src/lib/useScrollReveal.js`): returns a ref; one IntersectionObserver marks the element `data-reveal="pending"` after mount and adds `.is-visible` on entry (lift + fade on `--spring-reveal`). Reduced-motion / no-JS shows content immediately. Decorative motion — use sparingly on standing sections (see Restrained-Decoration Rule).
+- **`.glow-ring`** + **cosmic backdrop animations** (`glow-ring-spin`, `aurora-drift`, `star-twinkle`): the Cosmoq decorative loops (§4). Infinite but compositor-cheap; all freeze under reduced-motion.
 
 ### Named Rules
 **The Spring-Only Rule.** Interactive motion uses the spring tokens exclusively. Generic `ease-in-out`, `ease`, and linear are forbidden on press/enter/exit — they read as mechanical next to the springs. (The one exception is the backdrop fade and exit easings, which use plain `ease-in`/`ease-out` because a pure opacity change has no spatial component to spring.)
@@ -254,13 +275,13 @@ Motion here reads as native iOS, not as a web approximation of it. Five principl
 
 **The Reduced-Motion Rule.** Every motion has a `prefers-reduced-motion: reduce` path. The springs collapse to near-instant (1 ms) crossfades via `withReducedMotion()`, the tactile press is neutralized, and `.ios-scroll`'s smooth scroll switches to auto — state still resolves, just without motion. This is non-optional accessibility, not a nicety.
 
-**The No-Decoration Rule.** Motion conveys state — feedback, reveal, loading, transition — never decoration. There is no page-load choreography (users are in a task and won't wait for it), and no fade-and-rise on every scrolled section. The one signature flourish is the liquid-glass material (§4); motion's job is to make the chrome feel native, not to perform.
+**The Restrained-Decoration Rule** (revised from the old No-Decoration Rule, Cosmoq pass). Motion still mostly conveys state — feedback, reveal, loading, transition — and the **task UIs carry no page-load choreography**. The Cosmoq pass adds scoped decorative motion in three places, and no more: (1) the **cosmic backdrop** (§4) drifting/twinkling behind all content; (2) a **scroll reveal** — sections lift + fade in the first time they enter the viewport (`useScrollReveal` adds `.is-visible`, riding the `--spring-reveal` physics), applied *deliberately to a few standing sections*, not blanket-fired, and playing **once** per element; and (3) the **marketing landing route (`/`)** only, which — as a front door, not a task surface — earns a brief **staggered hero entrance** (`.hero-rise`, keyed off `--i`) on mount and a looping **ticker marquee** (`.marquee`). The landing is the *one* place page-load choreography is allowed; every tool page (`/analysis`, `/screening`, `/auto-screening`) keeps the no-choreography rule. All of the above, plus the glowing CTA ring, freeze under reduced-motion. Everything else still earns its motion by reporting state.
 
 ## 6. Components
 
 ### Buttons
 - **Shape:** the liquid-glass action buttons are **fully-rounded pills** (`rounded-full`) — the green primary and the quiet secondary share one pill form so the pair reads as a single material (see §4 Liquid Glass). Segmented toggles and verdict chips are also pills; flat `rounded-md` remains the form for inputs and chrome-less buttons.
-- **Primary:** the green CTA is the liquid-glass `.glass-accent` material — brand fill at ≥84% opacity (hover 92%) with `on-brand` dark text, backdrop blur, a lit top rim, a deep brand under-glow, and a **soft ambient halo** (two wide, low-opacity brand glows) bleeding past the pill edge — the signature of the liquid-glass read, ~10×24px padding. Hover → halo brightens + 1px lift; active → settle + 0.97 scale via `.tactile-deep` (see §5 Motion). Disabled/in-flight → halo drops (no green radiation when non-actionable) at 45% opacity, with an adjacent muted hint that explains what unlocks it (never an `alert()`). Stays the most decisive green on screen — never paler than a selected date or active toggle (see Decisive-Glass, §4).
+- **Primary:** the green CTA is the liquid-glass `.glass-accent` material — brand fill at ≥84% opacity (hover 92%) with `on-brand` dark text, backdrop blur, a lit top rim, a deep brand under-glow, and a **soft ambient halo** (two wide, low-opacity brand glows) bleeding past the pill edge — the signature of the liquid-glass read, ~10×24px padding. Hover → halo brightens + 1px lift; active → settle + 0.97 scale via `.tactile-deep` (see §5 Motion). Disabled/in-flight → halo drops (no green radiation when non-actionable) at 45% opacity, with an adjacent muted hint that explains what unlocks it (never an `alert()`). Stays the most decisive green on screen — never paler than a selected date or active toggle (see Decisive-Glass, §4). The primary CTA also wears the **`.glow-ring`** (§4): a rotating brand-green→signal-blue conic rim + soft bloom — the Cosmoq signature, in-brand and confined to this one button.
 - **Quiet:** the secondary affordance throughout — the `.glass-quiet` material: a pill matching the primary's shape + ambient-halo vocabulary, translucent `--c-elevated` fill (58%, hover 76%) + blur + white rim, with a **neutral** halo (ink-tinted light / soft black night — never green) so it reads as the frosted sibling, not a second CTA. `ink-muted` text that firms to `ink` on hover. Carries `.tactile-soft` for its press (§5). Distinct from the page in both themes.
 - **Focus:** glass pills carry an ink focus ring that follows the pill shape (`outline-offset: 3px`, `border-radius: 9999px`) — the default brand-green ring would be invisible on the green fill and sharp-cornered around the pill.
 - **Loading:** an `on-brand` spinner replaces motion inside the same button — no layout shift, no centered overlay spinner.
@@ -303,7 +324,8 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 - **Do** separate report *sections* with hairlines and dotted leaders; keep the single centered `max-w-4xl` column.
 - **Do** give real containers depth via `.surface-raised` / `.surface-float` (gradient sheen + soft tinted shadow + edge highlight), not flat fills.
 - **Do** carry night-mode elevation with the lighter surface gradient + top edge highlight + brighter hairline; reserve deep ambient shadow for floating layers.
-- **Do** keep paper surfaces near-neutral and let the `--canvas` carry only a faint brand-green atmospheric lift — identity stays in the green, type, and data.
+- **Do** keep paper surfaces near-neutral and let the `--canvas` + cosmic backdrop carry only a faint brand-green/blue atmospheric lift — identity stays in the green, type, and data; the starfield/aurora stays a whisper on Day and never reaches the content layer.
+- **Do** set display headings in Inter with the deep negative tracking (`.display` / `.display-xl`) — the masthead punch comes from size + tracking, with IBM Plex Mono still carrying every figure.
 - **Do** reserve the liquid-glass material (`.glass-*`, §4) for floating chrome only — modals, popovers, both calendars, and the primary/secondary action buttons — with content lifted above the glass and an opaque fallback for unsupported browsers.
 - **Do** use the spring tokens (`--spring-*`, §5) for all interactive motion, and the `.tactile` utilities for press feedback — a press scales *down* (0.975–0.97) and snaps back via the press spring, never up.
 - **Do** route every toggleable overlay (modal, popover, popup) through `useSpringPresence` so its enter/exit is interruptible — reopening mid-exit must cancel and restart cleanly (§5).
@@ -311,7 +333,7 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 
 ### Don't:
 - **Don't** reproduce **Bloomberg-terminal clutter** — no wall-to-wall density, no ALL-CAPS shouting, no ten colors fighting for attention.
-- **Don't** drift into **crypto-hype aesthetics** — no neon glows, no gamified urgency, no gradient text.
+- **Don't** drift into **crypto-hype aesthetics** — no gamified urgency, no gradient text. (The two scoped exceptions from the Cosmoq pass: the in-brand `.glow-ring` on the single primary CTA, and the cosmic backdrop's faint aurora — both green/blue only, never a rainbow neon. Anything beyond those two is still out.)
 - **Don't** ship a **generic indigo SaaS dashboard** — the one accent is Stockbit green, never default Tailwind blue/indigo.
 - **Don't** nest cards inside cards or tile the report into identical stat boxes — depth is for genuine containers, not for boxing every fact.
 - **Don't** tint the ground *warm/cream* or use a fluid `clamp()` display scale (the only canvas tint allowed is the brand green).
@@ -319,5 +341,5 @@ The typographic spine: `muted label · dotted leader · tabular value`, value op
 - **Don't** wash the green out — a glass primary (`.glass-accent`) holds brand fill at ≥80%; translucency is the texture, never an excuse to dim the CTA below a selected date or active toggle.
 - **Don't** let depth get loud — no neon glow or heavy drop shadows; keep it the soft, refined layered system, and ship an opaque fallback for every glass surface.
 - **Don't** use `ease-in-out`, `ease`, or linear on press/enter/exit motion — the spring tokens (§5) are the only curves for interactive motion. Generic easings read as mechanical next to them.
-- **Don't** add decorative motion — no page-load choreography, no fade-and-rise on every scrolled section. Motion conveys state (feedback, reveal, loading, transition), nothing else.
+- **Don't** add decorative motion *beyond the two scoped Cosmoq exceptions* (the cosmic backdrop + the once-per-element scroll reveal on a few standing sections, §4–§5) — still no page-load choreography, and don't blanket-fire the reveal on every scrolled element. Outside those two, motion conveys state (feedback, reveal, loading, transition), nothing else.
 - **Don't** rely on color alone, hover alone, or shadow alone to carry meaning.

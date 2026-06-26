@@ -416,6 +416,11 @@ async function screenSentimentDiscounts(date, count) {
   const seedCategory = {
     ...getCategory('bluechip'),
     id: 'discount-seed',
+    // PULLBACK ranking (not bluechip's size+near-high). The discount track wants
+    // quality names that have DROPPED below recent highs; ranking the seed by
+    // near-high (as bluechip does) sorts those names to the bottom and slices them
+    // out before the oversold gate runs — the bug that left this section empty.
+    tier1: 'pullback',
     jauhi: true, // non-bank, drop ≥Rp100T mega-caps — consistent with the site's JAUHI identity
     capFloor: 1e12, // ≥ Rp 1T (quality scale)
     capCeil: null,

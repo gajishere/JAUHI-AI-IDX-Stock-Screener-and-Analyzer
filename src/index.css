@@ -88,6 +88,21 @@
     --glass-rim: 255 255 255;
     --glass-rim-a: 0.6;
     --glass-blur: 16px;
+
+    /* ===== Cosmic atmosphere (Cosmoq) =====
+       A starfield + drifting aurora behind all content, layered OVER the
+       --canvas atmospheric ground. On the white reading room it is the faintest
+       whisper (stars are ink dust at ~5%, aurora a hair of brand/info) so the
+       page never stops reading as paper; at night it opens up into the real
+       deep-space look. Tokens so both themes drive one backdrop. */
+    --star-rgb: 22 24 28;
+    --star-opacity: 0.05;
+    --aurora-brand: 0.06;
+    --aurora-info: 0.05;
+    --scrollbar-track: rgb(22 24 28 / 0.06);
+    --scrollbar-thumb: rgb(22 24 28 / 0.28);
+    --scrollbar-thumb-hover: rgb(19 184 122 / 0.62);
+    --scrollbar-thumb-active: rgb(19 184 122 / 0.84);
   }
 
   .dark {
@@ -137,11 +152,29 @@
     --glass-fill-a: 0.58;
     --glass-rim: 255 255 255;
     --glass-rim-a: 0.22;
+
+    /* Night: the trading floor becomes deep space — stars are bright white dust,
+       the aurora glows brand-green + signal-blue off the near-black ground. */
+    --star-rgb: 255 255 255;
+    --star-opacity: 0.55;
+    --aurora-brand: 0.12;
+    --aurora-info: 0.10;
+    --scrollbar-track: rgb(255 255 255 / 0.07);
+    --scrollbar-thumb: rgb(255 255 255 / 0.46);
+    --scrollbar-thumb-hover: rgb(30 206 133 / 0.72);
+    --scrollbar-thumb-active: rgb(30 206 133 / 0.9);
+  }
+
+  html {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   body {
     @apply bg-paper text-ink font-sans antialiased;
-    font-feature-settings: "calt", "liga";
+    font-feature-settings: "calt", "liga", "cv11", "ss01";
+    font-optical-sizing: auto;
     transition: background-color 200ms var(--ease-out-quint), color 200ms var(--ease-out-quint);
   }
 
@@ -155,6 +188,86 @@
     z-index: -1;
     background: var(--canvas);
     pointer-events: none;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    body::after {
+      content: "";
+      position: fixed;
+      top: 0.75rem;
+      right: 0.18rem;
+      z-index: 60;
+      width: 2px;
+      height: calc(100dvh - 1.5rem);
+      border-radius: 999px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--c-brand) 18%, transparent),
+        color-mix(in srgb, var(--c-brand) 72%, white 10%),
+        color-mix(in srgb, var(--c-info) 34%, transparent)
+      );
+      box-shadow: 0 0 14px color-mix(in srgb, var(--c-brand) 36%, transparent);
+      opacity: 0.55;
+      pointer-events: none;
+      transform: scaleY(0.035);
+      transform-origin: top;
+      animation: page-scroll-progress linear both;
+      animation-timeline: scroll(root block);
+    }
+  }
+
+  *::-webkit-scrollbar {
+    width: 0.72rem;
+    height: 0.72rem;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    min-height: 3rem;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background:
+      linear-gradient(var(--scrollbar-thumb), var(--scrollbar-thumb)) padding-box,
+      linear-gradient(180deg, var(--scrollbar-track), transparent) border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: inset 0 0 0 1px rgb(var(--glass-rim) / 0.18);
+    transition:
+      background-color 180ms var(--ease-out-quint),
+      box-shadow 180ms var(--ease-out-quint),
+      border-color 180ms var(--ease-out-quint);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background:
+      linear-gradient(var(--scrollbar-thumb-hover), var(--scrollbar-thumb-hover)) padding-box,
+      linear-gradient(180deg, color-mix(in srgb, var(--c-brand) 30%, transparent), transparent) border-box;
+    box-shadow:
+      inset 0 0 0 1px rgb(var(--glass-rim) / 0.28),
+      0 0 18px color-mix(in srgb, var(--c-brand) 24%, transparent);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background:
+      linear-gradient(var(--scrollbar-thumb-active), var(--scrollbar-thumb-active)) padding-box,
+      linear-gradient(180deg, color-mix(in srgb, var(--c-brand) 42%, transparent), transparent) border-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  @keyframes page-scroll-progress {
+    from {
+      opacity: 0.36;
+      transform: scaleY(0.035);
+    }
+    to {
+      opacity: 0.72;
+      transform: scaleY(1);
+    }
   }
 
   ::selection {
@@ -209,6 +322,26 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  /* A more pronounced sibling of list-item-enter for the settings popover's
+     sections — bigger lift (18px) + a slight scale, and a wider 80ms stagger so
+     Appearance → Sound → Language visibly ripple in one after another rather than
+     arriving almost together. Same reveal spring; keyed off `--i`. */
+  .settings-reveal {
+    animation: settings-reveal-in var(--spring-reveal-dur) var(--spring-reveal) both;
+    animation-delay: calc(var(--i, 0) * 80ms);
+  }
+
+  @keyframes settings-reveal-in {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
     }
   }
 
@@ -721,6 +854,29 @@
     transform: scale(0.985);
   }
 
+  /* ===== Touch-target expansion (≥44px) =====
+     Guarantees a 44×44px hit area on a control whose VISUAL size is smaller —
+     the compact header icon buttons (36–40px) and the modal close ×. An
+     absolutely-positioned, invisible `::after` centered on the element carries
+     the extra hit area; because it's a child pseudo of the button, taps that
+     land in the expanded ring still target the button. The visible circle is
+     unchanged, so the header's tuned proportions hold while a thumb gets the
+     full target. Fine-pointer devices don't need it but it's harmless there. */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    /* paint nothing — purely a hit-area; stays above the icon for the tap but
+       never occludes it visually since it's transparent. */
+  }
+
   /* Press-and-hold "deeper" affordance for the biggest actions — the primary
      CTA. Held down, the surface settles a touch further and the shadow tightens,
      so a held press reads as "loaded". */
@@ -973,6 +1129,63 @@
     transform: rotate(135deg);
   }
 
+  .settings-popover {
+    --glass-fill-a: 0.7;
+  }
+
+  .dark .settings-popover {
+    --glass-fill-a: 0.74;
+  }
+
+  .settings-segmented {
+    border-color: color-mix(in srgb, var(--c-ink) 26%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass-rim) / 0.28),
+      0 10px 28px -20px color-mix(in srgb, var(--c-ink) 48%, transparent);
+  }
+
+  .settings-segmented::after {
+    background-image: linear-gradient(
+      155deg,
+      rgb(var(--glass-fill) / 0.54) 0%,
+      rgb(var(--glass-fill) / 0.76) 52%,
+      rgb(var(--glass-fill) / 0.82) 100%
+    );
+  }
+
+  /* The active pill. A clean, luminous brand green — brighter than the solid
+     token so the dark on-brand text clears AA in BOTH themes. The earlier stop
+     mixed brand-deep toward #00160d, which made the pill dark green; with the
+     near-black on-brand text that read muddy/low-contrast ("so dark"). The
+     gentle top highlight keeps it feeling lit, not flat. */
+  .settings-segmented > span[aria-hidden='true'] {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--c-brand) 88%, white 12%),
+      var(--c-brand)
+    ) !important;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 0 24px color-mix(in srgb, var(--c-brand) 36%, transparent);
+  }
+
+  .settings-segmented button {
+    font-weight: 650;
+  }
+
+  .settings-segmented button[aria-pressed='true'],
+  .settings-segmented button[aria-checked='true'] {
+    color: var(--c-on-brand) !important;
+  }
+
+  .settings-segmented button:not([aria-pressed='true']):not([aria-checked='true']) {
+    color: color-mix(in srgb, var(--c-ink) 78%, transparent) !important;
+  }
+
+  .settings-segmented button:not([aria-pressed='true']):not([aria-checked='true']):hover {
+    color: var(--c-ink) !important;
+  }
+
   .jauhi-scan {
     position: relative;
     display: inline-flex;
@@ -1112,6 +1325,572 @@
   }
 }
 
+/* ===== Cosmic backdrop (Cosmoq) =====
+   Two fixed layers mounted once by <CosmicBackdrop/> and pinned behind
+   everything. Static, not animated. The earlier twinkle (opacity) + drift
+   (transform) were cheap IN ISOLATION — pure compositor properties. The problem
+   was what sits above them: every glass surface on the page uses
+   `backdrop-filter: blur()`, which has to re-sample and re-blur its backdrop
+   every frame the backdrop changes. An eternally animating global backdrop meant
+   ~6-8 blurred glass layers (cards, surface strip, CTAs) each re-rasterizing
+   their blur, every frame, forever — the real engine of the landing-page lag.
+   Freezing the backdrop removes that per-frame change, so the glass blurs
+   rasterize once and stay cached. The atmosphere stays (static stars + static
+   glow); only the motion dies — also truer to the "calm research desk" voice. */
+.cosmic-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cosmic-stars {
+  position: absolute;
+  /* Overscan ~2× the viewport so the field can rotate around the screen centre
+     without ever revealing a hard edge at the corners. The gradient tiles via
+     background-repeat, so painting the larger box costs nothing extra. */
+  inset: -50%;
+  isolation: isolate;
+  background-image:
+    radial-gradient(1.4px 1.4px at 20px 30px, rgb(var(--star-rgb) / var(--star-opacity)), transparent),
+    radial-gradient(1.2px 1.2px at 130px 80px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.8)), transparent),
+    radial-gradient(1px 1px at 70px 160px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.7)), transparent),
+    radial-gradient(1.6px 1.6px at 180px 200px, rgb(var(--star-rgb) / var(--star-opacity)), transparent),
+    radial-gradient(1px 1px at 240px 50px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.6)), transparent);
+  background-size: 280px 280px;
+  background-repeat: repeat;
+  opacity: 0.85;
+  /* Slow continuous rotation about the screen centre = the apparent diurnal
+     motion of the night sky. Stars near the centre barely move while outlying
+     ones trace long arcs, reading as "real" sky rather than a static texture.
+     transform-only so it stays on the compositor; the ::before/::after twinkle
+     layers below keep their independent opacity shimmer. */
+  transform-origin: 50% 50%;
+  will-change: transform;
+  animation: cosmic-star-rotate 140s linear infinite;
+}
+
+.cosmic-stars::before,
+.cosmic-stars::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat;
+  mix-blend-mode: screen;
+  will-change: opacity;
+}
+
+.cosmic-stars::before {
+  background-image:
+    radial-gradient(1.1px 1.1px at 46px 64px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.72)), transparent),
+    radial-gradient(1.7px 1.7px at 210px 24px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.46)), transparent),
+    radial-gradient(1px 1px at 252px 174px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.66)), transparent),
+    radial-gradient(1.3px 1.3px at 92px 226px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.5)), transparent);
+  background-size: 320px 320px;
+  opacity: 0.26;
+  animation: cosmic-star-pulse-a 18s ease-in-out infinite;
+}
+
+.cosmic-stars::after {
+  background-image:
+    radial-gradient(1px 1px at 18px 190px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.52)), transparent),
+    radial-gradient(1.5px 1.5px at 164px 118px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.82)), transparent),
+    radial-gradient(1px 1px at 286px 54px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.58)), transparent),
+    radial-gradient(1.2px 1.2px at 238px 264px, rgb(var(--star-rgb) / calc(var(--star-opacity) * 0.48)), transparent);
+  background-size: 360px 360px;
+  opacity: 0.18;
+  animation: cosmic-star-pulse-b 27s ease-in-out infinite;
+}
+
+@keyframes cosmic-star-pulse-a {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  36% {
+    opacity: 0.42;
+  }
+  68% {
+    opacity: 0.24;
+  }
+}
+
+@keyframes cosmic-star-pulse-b {
+  0%,
+  100% {
+    opacity: 0.14;
+  }
+  42% {
+    opacity: 0.34;
+  }
+  74% {
+    opacity: 0.2;
+  }
+}
+
+/* Full revolution of the starfield — a half-turn over 70s, a full turn over
+   140s. That reads as a gentle celestial drift, fast enough to notice within a
+   few seconds of stillness but never demanding attention (calm research desk). */
+@keyframes cosmic-star-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cosmic-aurora {
+  position: absolute;
+  inset: -25%;
+  background-image:
+    radial-gradient(38% 46% at 18% 14%, color-mix(in srgb, var(--c-brand) calc(var(--aurora-brand) * 100%), transparent) 0%, transparent 62%),
+    radial-gradient(42% 50% at 84% 10%, color-mix(in srgb, var(--c-info) calc(var(--aurora-info) * 100%), transparent) 0%, transparent 64%),
+    radial-gradient(46% 52% at 70% 88%, color-mix(in srgb, var(--c-brand) calc(var(--aurora-brand) * 70%), transparent) 0%, transparent 66%);
+}
+
+@layer components {
+  /* ===== Display heading treatment (Cosmoq) =====
+     Inter set large with the deep negative tracking that gives Cosmoq's
+     headings their "next-gen" punch. `.display` is opt-in for the big mastheads;
+     it pairs with the existing `font-serif` (now Inter) + `tracking-tight`
+     headings, going a step tighter and heavier for hero moments. */
+  .display {
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1.04;
+  }
+  .display-xl {
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.02;
+  }
+
+  /* ===== Glowing gradient-border CTA (Cosmoq signature) =====
+     A static conic light ring around a pill — re-hued to the desk's own identity
+     (brand green → signal blue → green). The earlier version animated the conic
+     angle (`@property --glow-angle`) inside a mask-composited rim AND a blurred
+     bloom; animating a custom property in a masked+blurred gradient rasterizes
+     both layers every frame, and with two CTAs on the landing that alone blew the
+     16ms budget. Static gradients are rasterized once; the bloom keeps a cheap
+     compositor-only opacity breathing so the ring still feels lit, not dead.
+     This also sits truer to the brand voice ("reduces adrenaline, not
+     spectacle") than a spinning halo. */
+  .glow-ring {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-ring::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      color-mix(in srgb, var(--c-brand) 90%, transparent),
+      color-mix(in srgb, var(--c-info) 85%, transparent),
+      color-mix(in srgb, var(--c-brand-strong) 80%, transparent),
+      color-mix(in srgb, var(--c-brand) 90%, transparent)
+    );
+    /* mask to just the rim: fill minus content box = a ring */
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    z-index: -1;
+    opacity: 0.9;
+  }
+  /* A soft outer bloom of the same ring so the glow bleeds past the edge. Kept
+     static (rasterized once) and given a slow opacity breathing — opacity on a
+     promoted layer composites cheaply, no per-frame raster. */
+  .glow-ring::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background: conic-gradient(
+      color-mix(in srgb, var(--c-brand) 55%, transparent),
+      color-mix(in srgb, var(--c-info) 50%, transparent),
+      color-mix(in srgb, var(--c-brand) 55%, transparent)
+    );
+    filter: blur(9px);
+    z-index: -2;
+    opacity: 0.55;
+    animation: glow-ring-breathe 4.5s var(--ease-out-quint) infinite alternate;
+  }
+
+  @keyframes glow-ring-breathe {
+    from { opacity: 0.42; }
+    to { opacity: 0.66; }
+  }
+
+  /* ===== Scroll reveal (Cosmoq) =====
+     Sections lift + fade as they enter the viewport, driven by useScrollReveal
+     (an IntersectionObserver that adds `.is-visible`). Rides the existing reveal
+     spring so it settles with the same physics as the rest of the desk. The
+     un-revealed state is only applied when JS has marked the element pending
+     (`data-reveal`), so without JS / with reduced-motion content is fully visible. */
+  [data-reveal="pending"] {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  [data-reveal="pending"].is-visible {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity var(--spring-reveal-dur) var(--spring-reveal),
+      transform var(--spring-reveal-dur) var(--spring-reveal);
+  }
+  /* Landing-only calmer reveal: slower, shorter lift, languid ease-out-quint
+     so sections ease into view instead of springing. Scoped to the marketing
+     surface; tool pages keep the shared spring. */
+  .landing-root [data-reveal="pending"] {
+    transform: translateY(12px);
+  }
+  .landing-root [data-reveal="pending"].is-visible {
+    transition:
+      opacity 800ms var(--ease-out-quint),
+      transform 800ms var(--ease-out-quint);
+  }
+
+  /* ===== Full-bleed (landing) =====
+     Breaks a section out of the centered `max-w-4xl` column to full viewport
+     width — the Cosmoq hero + marquee span edge to edge while the tool pages
+     stay in their column. Pure margin trick, no JS, no layout dependency. */
+  .full-bleed {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+  }
+
+  /* ===== Lazy-render below-fold landing sections =====
+     `content-visibility: auto` tells the browser to skip rendering, layout and
+     paint of these sections until they actually scroll into view — so the heavy
+     first paint pays only for the hero, not the marquee + 3 glass engine cards
+     + closing CTA all at once. The hero (first child) is excluded so the LCP
+     element paints immediately. `contain-intrinsic-size` gives the skipped
+     sections a placeholder height so the scrollbar doesn't jump as they render.
+     This is a pure render-skip, not visibility-gating: content is fully rendered
+     the instant it intersects, so the scroll-reveal animations still fire. */
+  .landing-root > * + * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 600px;
+  }
+  .landing-root > .landing-engines {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+  }
+
+  /* ===== Tool pages (shared desk language) =====
+     The landing page establishes the visual grammar: quiet cosmic atmosphere,
+     glass chrome, lifted report slabs, mono tape labels, and calm reveal motion.
+     These classes carry that same system into the functional pages without
+     turning dense data workflows into marketing cards. */
+  .tool-page {
+    position: relative;
+    isolation: isolate;
+    min-width: 0;
+  }
+  .tool-page::before {
+    content: "";
+    position: absolute;
+    inset: -2rem -1rem auto -1rem;
+    height: 20rem;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(38% 56% at 12% 0%, color-mix(in srgb, var(--c-brand) 12%, transparent), transparent 66%),
+      radial-gradient(42% 58% at 88% 4%, color-mix(in srgb, var(--c-info) 9%, transparent), transparent 68%);
+    filter: blur(22px);
+    opacity: 0.9;
+  }
+  .tool-masthead {
+    position: relative;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-line) 78%, transparent);
+  }
+  .tool-kicker {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--c-brand-strong);
+  }
+  .tool-title {
+    margin-top: 0.375rem;
+    font-family: inherit;
+    font-size: clamp(2rem, 12vw, 3.75rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  .tool-subtitle {
+    margin-top: 0.625rem;
+    max-width: 42rem;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--c-ink-muted);
+    text-wrap: pretty;
+    overflow-wrap: anywhere;
+  }
+  .tool-panel {
+    position: relative;
+    isolation: isolate;
+    border: 1px solid color-mix(in srgb, var(--c-line) 86%, transparent);
+    border-radius: 1rem;
+    background:
+      linear-gradient(
+        180deg,
+        rgb(var(--glass-fill) / 0.16) 0%,
+        rgb(var(--glass-fill) / 0.08) 52%,
+        rgb(var(--glass-fill) / 0.04) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 22px 60px -42px rgb(0 0 0 / 0.65);
+  }
+  .tool-panel-soft {
+    border: 1px solid color-mix(in srgb, var(--c-line) 68%, transparent);
+    border-radius: 1rem;
+    background:
+      linear-gradient(
+        180deg,
+        rgb(var(--glass-fill) / 0.12),
+        rgb(var(--glass-fill) / 0.05)
+      );
+  }
+  .tool-section {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid color-mix(in srgb, var(--c-line) 78%, transparent);
+  }
+  .tool-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .tool-table {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--c-line) 86%, transparent);
+    border-radius: 1rem;
+    background:
+      linear-gradient(
+        180deg,
+        rgb(var(--glass-fill) / 0.15) 0%,
+        rgb(var(--glass-fill) / 0.08) 48%,
+        rgb(var(--glass-fill) / 0.03) 100%
+      );
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 26px 70px -48px rgb(0 0 0 / 0.72);
+  }
+  .tool-input {
+    width: 100%;
+    min-width: 0;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--c-line) 92%, transparent);
+    background:
+      linear-gradient(180deg, rgb(var(--glass-fill) / 0.2), rgb(var(--glass-fill) / 0.08)),
+      color-mix(in srgb, var(--c-paper) 80%, transparent);
+    color: var(--c-ink);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04), 0 8px 22px -18px rgb(0 0 0 / 0.45);
+    transition:
+      transform var(--spring-press-dur) var(--spring-press),
+      border-color 200ms var(--ease-out-quint),
+      box-shadow 200ms var(--ease-out-quint);
+  }
+  .tool-input::placeholder {
+    color: var(--c-ink-muted);
+  }
+  .tool-input:hover {
+    border-color: color-mix(in srgb, var(--c-brand) 42%, var(--c-line));
+  }
+  .tool-input:focus {
+    outline: none;
+    border-color: var(--c-brand);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--c-brand) 20%, transparent),
+      0 16px 34px -24px rgb(0 0 0 / 0.55);
+  }
+  .tool-input:focus-visible {
+    outline: none;
+  }
+  .desk-grid-fade {
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--c-line) 45%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--c-line) 45%, transparent) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: linear-gradient(to bottom, #000, transparent 82%);
+    -webkit-mask-image: linear-gradient(to bottom, #000, transparent 82%);
+    opacity: 0.12;
+  }
+  .tool-page .report-enter,
+  .tool-page .stage-enter {
+    animation-duration: 760ms;
+    animation-timing-function: var(--ease-out-quint);
+  }
+
+  @media (max-width: 480px) {
+    .tool-title {
+      max-width: 100%;
+      font-size: clamp(1.875rem, 9vw, 2.5rem);
+      overflow-wrap: break-word;
+    }
+    .tool-page .stage-enter {
+      width: min(100%, calc(100vw - 2.5rem));
+      max-width: 100%;
+      overflow-x: clip;
+    }
+  }
+
+  /* ===== Ticker marquee (landing) =====
+     A seamless scrolling tape of IDX names. The track holds the list twice;
+     translating it -50% loops invisibly. Edge mask fades the tape into the
+     page so names appear/vanish rather than clip. Pauses on hover. */
+  .marquee {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+  .marquee-track {
+    display: inline-flex;
+    width: max-content;
+    /* Calmer tape: a slower linear drift reads as an ambient crawl rather than
+       a busy feed. Linear is required for the seamless -50% loop. */
+    animation: marquee-scroll 52s linear infinite;
+  }
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee-scroll {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+
+  /* ===== Flowing background paths (landing hero) =====
+     The woven SVG line field (BackgroundPaths.jsx). The lines are STATIC (one
+     paint, ~free); the motion is two GPU-composited light-sweeps (.bg-paths-glint)
+     that translate across the weave. This replaced an animated stroke-dashoffset
+     "comet flow" that repainted the whole hero every frame and measured ~25fps;
+     the sweep technique holds 60fps because transforms run off the main thread.
+     Tinted toward the brand on an ink/white base. Freezes under reduced-motion. */
+  .bg-paths-field {
+    /* Lead with ink so the lines are actually visible on the white reading room;
+       the earlier 30% brand mix read as muddy gray and disappeared. Brand is the
+       accent that threads through it, not the whole color. */
+    color: color-mix(in srgb, var(--c-ink) 70%, var(--c-brand) 30%);
+    /* Fade the weave + sweeps to transparent over the bottom ~28% so they
+       dissolve into the page background instead of being hard-clipped by the
+       hero's overflow-hidden edge — a soft seam where the field meets the
+       reading room below. Masking (not an opaque overlay) so the real canvas
+       shows through and the join matches in both themes. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%);
+  }
+  .dark .bg-paths-field {
+    color: color-mix(in srgb, #ffffff 65%, var(--c-brand) 35%);
+  }
+  /* Static woven lines — no per-frame paint. */
+  .bg-path {
+    fill: none;
+    opacity: var(--op, 0.2);
+  }
+
+  /* The motion: two soft light-sweeps that translate across the weave. Pure
+     transform (GPU-composited, off the main thread), so they hold 60fps where
+     animating the strokes did not. The blur is baked once into each element and
+     then just moved; mix-blend-mode: plus-lighter makes them brighten the lines
+     and cosmic ground they pass over without washing the page. They start
+     off-screen left and sweep diagonally past the right edge (the hero clips). */
+  .bg-paths-glint {
+    position: absolute;
+    top: -40%;
+    left: -35%;
+    width: 45%;
+    height: 180%;
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--c-brand) 38%, transparent),
+      transparent 72%
+    );
+    filter: blur(40px);
+    mix-blend-mode: plus-lighter;
+    /* Slower, breathier sweeps: ~2.5× the prior duration so the light drifts
+       across the weave instead of sweeping it — calmer ambient motion. The
+       longer duration plus alternate direction gives a gentle in/out breath. */
+    animation: glint-sweep 32s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .bg-paths-glint-2 {
+    top: -30%;
+    left: -30%;
+    height: 150%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--c-info) 32%, transparent),
+      transparent 72%
+    );
+    animation-duration: 44s;
+    animation-delay: -6s;
+    animation-direction: alternate-reverse;
+  }
+
+  @keyframes glint-sweep {
+    from {
+      transform: translate3d(0, 4%, 0);
+    }
+    to {
+      transform: translate3d(320%, -4%, 0);
+    }
+  }
+
+  /* ===== Hero staggered entrance (landing only) =====
+     The one place the desk allows a brief load choreography: the hero's lines
+     fade-up in sequence on mount, keyed off `--i` like `.list-item-enter`.
+     Scoped to the marketing surface; the task UIs keep their no-choreography
+     rule. Collapses under reduced-motion. */
+  .hero-rise {
+    animation: hero-rise-in var(--spring-reveal-dur) var(--spring-reveal) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+
+  @keyframes hero-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Calmer hero choreography on the landing surface: a longer 900ms settle with
+     a shorter 10px lift (vs 18px above), a wider 140ms stagger, and the languid
+     ease-out-quint instead of the snappier spring — so the entrance reads as a
+     slow lift into place rather than a quick pop. The global springs stay
+     untouched so the tool pages keep their native snap. */
+  .landing-root .hero-rise {
+    animation: hero-rise-in-calm 900ms var(--ease-out-quint) both;
+    animation-delay: calc(var(--i, 0) * 140ms);
+  }
+  @keyframes hero-rise-in-calm {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .report-enter {
     animation: none;
@@ -1136,6 +1915,9 @@
   .list-item-enter {
     animation: none;
   }
+  .settings-reveal {
+    animation: none;
+  }
   .dropdown-enter {
     animation: none;
   }
@@ -1147,6 +1929,33 @@
   }
   .jauhi-scan::after,
   .jauhi-scan span {
+    animation: none;
+  }
+  /* Cosmic backdrop: freeze the gentle star shimmer AND the sky rotation for
+     motion-sensitive users. */
+  .cosmic-stars,
+  .cosmic-stars::before,
+  .cosmic-stars::after {
+    animation: none;
+  }
+  /* Glow-ring breathe is dropped under reduced-motion. */
+  .glow-ring::after {
+    animation: none;
+  }
+  /* Scroll reveal: content is shown immediately, no lift. */
+  [data-reveal="pending"] {
+    opacity: 1;
+    transform: none;
+  }
+  /* Landing: freeze the marquee and skip the hero choreography. */
+  .marquee-track {
+    animation: none;
+  }
+  .hero-rise {
+    animation: none;
+  }
+  /* Background paths: the lines are already static; just park the light-sweeps. */
+  .bg-paths-glint {
     animation: none;
   }
   .result-row-enter {

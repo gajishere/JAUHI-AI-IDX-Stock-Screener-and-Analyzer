@@ -8,7 +8,7 @@ export function ratingTone(rating) {
 }
 
 export const inputClass =
-  'w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted transition-[transform,opacity] duration-200 hover:border-ink-muted/60 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 focus:scale-[1.02]';
+  'tool-input px-3.5 py-2.5 text-sm';
 
 export const fileInputClass =
-  'w-full cursor-pointer text-sm text-ink-muted transition-[transform,opacity] duration-200 file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-line file:bg-well file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink hover:file:border-ink-muted/60 hover:file:bg-well-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25';
+  'w-full cursor-pointer text-sm text-ink-muted transition-[transform,opacity] duration-200 file:mr-3 file:cursor-pointer file:rounded-full file:border file:border-solid file:border-line file:bg-well file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink hover:file:border-ink-muted/60 hover:file:bg-well-2 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25';

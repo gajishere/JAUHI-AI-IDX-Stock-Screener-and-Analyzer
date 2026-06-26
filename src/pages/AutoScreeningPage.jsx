@@ -14,6 +14,7 @@ import { useSound } from '../lib/sound';
 import { Row, RatingFigure } from '../components/report';
 import { marketStatus, nextScanSlot, wibNow } from '../lib/marketHours';
 import { useFlashOnChange } from '../lib/useFlashOnChange';
+import { useScrollReveal } from '../lib/useScrollReveal';
 
 const POLL_MS = 15 * 60_000;
 
@@ -208,7 +209,7 @@ function PlanDisclosure({ id, label, plan, live, rvol, lastValueTraded, scanType
         type="button"
         onClick={() => onToggle(id)}
         aria-expanded={expanded}
-        className="tactile-soft flex w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left"
+        className="tactile-soft flex min-h-11 w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left sm:min-h-0"
       >
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-strong">{label}</span>
@@ -279,49 +280,49 @@ function MoverRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
   if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
 
   return (
-    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
-      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
-        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
+    <li className="result-row-enter px-4 py-5 sm:px-6" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-4 rounded-xl sm:gap-5">
+        <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line/80 bg-well/25 font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
 
         <div className="min-w-0 flex-1">
           {/* line 1 — ticker + price */}
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex min-w-0 items-baseline gap-2">
-              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              <span className="display font-serif text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{c.ticker}</span>
               {c.tier === 'leader' && (
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-ink-muted">{t('trend leader', 'pemimpin tren')}</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-brand-strong">{t('trend leader', 'pemimpin tren')}</span>
               )}
               {c.tier === 'relaxed' && (
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-warn">{t('developing', 'berkembang')}</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-warn">{t('developing', 'berkembang')}</span>
               )}
               {c.board === 'Pemantauan Khusus' && (
-                <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-warn">{t('monitored', 'pemantauan')}</span>
               )}
             </div>
             <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              <span ref={priceRef} className="rounded px-0.5 text-lg text-ink sm:text-xl">{formatRp(c.live?.last ?? c.close)}</span>
               {c.live?.changePct != null && (
-                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+                <span ref={changeRef} className={`rounded px-0.5 text-sm ${changeTone}`}>{signedPct(c.live.changePct)}</span>
               )}
             </div>
           </div>
 
           {/* line 2 — name + score/rating */}
           <div className="mt-0.5 flex items-baseline justify-between gap-3">
-            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+            <p className="min-w-0 truncate text-sm text-ink-muted" title={c.name}>
               {c.name}
               {c.capTier && <span> · {c.capTier}</span>}
               {c.sector && <span> · {c.sector}</span>}
             </p>
-            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs tabular-nums text-ink-muted">
+            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-sm tabular-nums text-ink-muted">
               {c.composite != null ? c.composite.toFixed(1) : '—'}
-              <RatingFigure rating={c.overallRating} className="text-sm" />
+              <RatingFigure rating={c.overallRating} className="text-lg" />
             </span>
           </div>
 
           {/* line 3 — signal line */}
           {(signals.length > 0 || bandar?.accdist) && (
-            <p className="mt-1.5 font-mono text-[11px] text-ink-muted">
+            <p className="mt-2 font-mono text-xs text-ink-muted">
               {signals.join(' · ')}
               {bandar?.accdist && (
                 <>
@@ -374,38 +375,38 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
   if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
 
   return (
-    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
-      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
-        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
+    <li className="result-row-enter px-4 py-5 sm:px-6" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-4 rounded-xl sm:gap-5">
+        <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line/80 bg-well/25 font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
 
         <div className="min-w-0 flex-1">
           {/* line 1 — ticker + price */}
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex min-w-0 items-baseline gap-2">
-              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              <span className="display font-serif text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{c.ticker}</span>
               {c.depth === 'shallow' && (
-                <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-muted">{t('shallow', 'dangkal')}</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">{t('shallow', 'dangkal')}</span>
               )}
               {c.board === 'Pemantauan Khusus' && (
-                <span className="shrink-0 text-[10px] uppercase tracking-wide text-warn">{t('monitored', 'pemantauan')}</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-warn">{t('monitored', 'pemantauan')}</span>
               )}
             </div>
             <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              <span ref={priceRef} className="rounded px-0.5 text-lg text-ink sm:text-xl">{formatRp(c.live?.last ?? c.close)}</span>
               {c.live?.changePct != null && (
-                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+                <span ref={changeRef} className={`rounded px-0.5 text-sm ${changeTone}`}>{signedPct(c.live.changePct)}</span>
               )}
             </div>
           </div>
 
           {/* line 2 — name + discount depth */}
           <div className="mt-0.5 flex items-baseline justify-between gap-3">
-            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+            <p className="min-w-0 truncate text-sm text-ink-muted" title={c.name}>
               {c.name}
               {c.capTier && <span> · {c.capTier}</span>}
               {c.sector && <span> · {c.sector}</span>}
             </p>
-            <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-ink">
+            <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-ink">
               {c.discountPct == null
                 ? '—'
                 : c.discountPct > 0.05
@@ -445,14 +446,15 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
 // ---- DiscountSection (Tier C — standing, always-on) ----
 function DiscountSection({ discounts, ihsg, expandedPlan, onTogglePlan, scanType }) {
   const t = useT();
+  const revealRef = useScrollReveal();
   const list = Array.isArray(discounts) ? discounts : [];
   const ihsgRed = ihsg?.changePct != null && ihsg.changePct < 0;
 
   return (
-    <section className="mt-14">
+    <section ref={revealRef} className="mt-14">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
-          <h3 className="font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
+          <h3 className="display font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
             {t('Sentiment discounts', 'Diskon sentimen')}
           </h3>
           <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
@@ -471,7 +473,7 @@ function DiscountSection({ discounts, ihsg, expandedPlan, onTogglePlan, scanType
 
       <div className="mt-5">
         {list.length > 0 ? (
-          <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
+          <ol className="tool-table divide-y divide-line">
             {list.map((c, i) => (
               <DiscountRow
                 key={`disc-${c.ticker}`}
@@ -485,7 +487,7 @@ function DiscountSection({ discounts, ihsg, expandedPlan, onTogglePlan, scanType
             ))}
           </ol>
         ) : (
-          <div className="surface-raised rounded-2xl border border-line px-6 py-9 text-center">
+          <div className="tool-panel px-6 py-9 text-center">
             <p className="font-serif text-base font-medium">{t('No discounts right now', 'Belum ada diskon saat ini')}</p>
             <p className="mt-1 text-sm text-ink-muted">
               {ihsgRed
@@ -517,37 +519,37 @@ function RecognizableRow({ c, rank, index, planExpanded, onTogglePlan, scanType 
   if (c.lastValueTraded > 0) signals.push(fmtMilliar(c.lastValueTraded));
 
   return (
-    <li className="result-row-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(index, 9) }}>
-      <Link to={href} className="tactile-soft group flex gap-3.5 rounded-lg sm:gap-4">
-        <span className="w-5 shrink-0 pt-0.5 text-right font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
+    <li className="result-row-enter px-4 py-5 sm:px-6" style={{ '--i': Math.min(index, 9) }}>
+      <Link to={href} className="tactile-soft group flex gap-4 rounded-xl sm:gap-5">
+        <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line/80 bg-well/25 font-mono text-sm tabular-nums text-ink-muted">{rank}</span>
 
         <div className="min-w-0 flex-1">
           {/* line 1 — ticker + group + price */}
           <div className="flex items-baseline justify-between gap-3">
             <div className="flex min-w-0 items-baseline gap-2">
-              <span className="font-mono text-sm font-semibold text-ink">{c.ticker}</span>
+              <span className="display font-serif text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{c.ticker}</span>
               {c.group && (
-                <span className="shrink-0 truncate font-mono text-[10px] uppercase tracking-wide text-brand-strong">{c.group}</span>
+                <span className="shrink-0 truncate font-mono text-[10px] uppercase tracking-[0.14em] text-brand-strong">{c.group}</span>
               )}
             </div>
             <div className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-              <span ref={priceRef} className="rounded px-0.5 text-sm text-ink">{formatRp(c.live?.last ?? c.close)}</span>
+              <span ref={priceRef} className="rounded px-0.5 text-lg text-ink sm:text-xl">{formatRp(c.live?.last ?? c.close)}</span>
               {c.live?.changePct != null && (
-                <span ref={changeRef} className={`rounded px-0.5 text-xs ${changeTone}`}>{signedPct(c.live.changePct)}</span>
+                <span ref={changeRef} className={`rounded px-0.5 text-sm ${changeTone}`}>{signedPct(c.live.changePct)}</span>
               )}
             </div>
           </div>
 
           {/* line 2 — name + score/rating */}
           <div className="mt-0.5 flex items-baseline justify-between gap-3">
-            <p className="min-w-0 truncate text-xs text-ink-muted" title={c.name}>
+            <p className="min-w-0 truncate text-sm text-ink-muted" title={c.name}>
               {c.name}
               {c.capTier && <span> · {c.capTier}</span>}
               {c.sector && <span> · {c.sector}</span>}
             </p>
-            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs tabular-nums text-ink-muted">
+            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-sm tabular-nums text-ink-muted">
               {c.composite != null ? c.composite.toFixed(1) : '—'}
-              <RatingFigure rating={c.overallRating} className="text-sm" />
+              <RatingFigure rating={c.overallRating} className="text-lg" />
             </span>
           </div>
 
@@ -579,14 +581,15 @@ function RecognizableRow({ c, rank, index, planExpanded, onTogglePlan, scanType 
 // ---- RecognizableSection (Tier D — standing, always-on) ----
 function RecognizableSection({ recognizable, expandedPlan, onTogglePlan, scanType }) {
   const t = useT();
+  const revealRef = useScrollReveal();
   const list = Array.isArray(recognizable) ? recognizable : [];
   if (list.length === 0) return null; // quiet when nothing constructive among the big names
 
   return (
-    <section className="mt-14">
+    <section ref={revealRef} className="mt-14">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
-          <h3 className="font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
+          <h3 className="display font-serif text-xl font-medium tracking-tight [text-wrap:balance] sm:text-2xl">
             {t('Liquid & familiar', 'Likuid & populer')}
           </h3>
           <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
@@ -599,7 +602,7 @@ function RecognizableSection({ recognizable, expandedPlan, onTogglePlan, scanTyp
       </div>
 
       <div className="mt-5">
-        <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
+        <ol className="tool-table divide-y divide-line">
           {list.map((c, i) => (
             <RecognizableRow
               key={`recog-${c.ticker}`}
@@ -622,7 +625,7 @@ function StateNotice({ kind }) {
   const t = useT();
   const scanning = kind === 'scanning' || kind === 'no-snapshot';
   return (
-    <div className="surface-raised rounded-2xl border border-line px-6 py-12 text-center">
+    <div className="tool-panel px-6 py-12 text-center">
       {scanning ? (
         <>
           <span className="jauhi-scan mx-auto mb-4" aria-hidden="true">
@@ -704,17 +707,17 @@ export default function AutoScreeningPage() {
   const marketClosed = marketStatus(new Date()) === 'closed';
 
   return (
-    <div className="flex flex-col">
+    <div className="tool-page flex flex-col">
       {/* masthead */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="tool-masthead flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] tracking-[0.14em] text-brand-strong">
+          <p className="tool-kicker">
             {t('auto-screening · momentum desk', 'penyaringan otomatis · meja momentum')}
           </p>
-          <h2 className="mt-1.5 font-serif text-2xl font-medium tracking-tight [text-wrap:balance] sm:text-3xl">
+          <h2 className="tool-title display-xl font-serif">
             {t('Today’s movers', 'Penggerak hari ini')}
           </h2>
-          <p className="mt-1.5 max-w-prose text-sm text-ink-muted">
+          <p className="tool-subtitle">
             {t(
               'Rescanned every 15 minutes while the market is open — strongest momentum and breakout names, each with a live ATR trading plan.',
               'Dipindai tiap 15 menit selama pasar buka — momentum & breakout terkuat, masing-masing dengan rencana trading ATR langsung.',
@@ -753,7 +756,7 @@ export default function AutoScreeningPage() {
       {/* movers */}
       <div className="mt-8">
         {status === 'loading' && (
-          <div className="surface-raised space-y-2 rounded-2xl border border-line p-2">
+          <div className="tool-panel space-y-2 p-2">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="skeleton h-16 rounded-xl" />
             ))}
@@ -761,7 +764,7 @@ export default function AutoScreeningPage() {
         )}
         {(status === 'scanning' || status === 'empty' || status === 'error') && <StateNotice kind={status} />}
         {status === 'ready' && (
-          <ol className="surface-raised divide-y divide-line overflow-hidden rounded-2xl border border-line">
+          <ol className="tool-table divide-y divide-line">
             {candidates.map((c, i) => (
               <MoverRow
                 key={c.ticker}

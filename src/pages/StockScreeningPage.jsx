@@ -216,7 +216,7 @@ function WhyNotRecommended({ date, filters, results }) {
           aria-controls="screening-ticker-suggestions"
           aria-activedescendant={active >= 0 ? `screening-ticker-option-${active}` : undefined}
           aria-autocomplete="list"
-          className="tactile-soft w-full rounded-full border border-line bg-paper py-2.5 pl-11 pr-5 font-mono text-sm text-ink shadow-sm shadow-ink/5 placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="tool-input py-2.5 pl-11 pr-5 font-mono text-sm placeholder:font-sans"
         />
         {suggestionsMounted && suggestions.length > 0 && (
           <ul
@@ -847,7 +847,7 @@ export default function StockScreeningPage() {
   );
 
   return (
-    <div className="flex flex-col">
+    <div className="tool-page flex flex-col">
       {/* ===== Stepper and main content ===== */}
       {(!loading && !error) && (
         <div className="py-2 sm:py-6">
@@ -856,10 +856,11 @@ export default function StockScreeningPage() {
           {/* Stage 1: Select Date */}
           {stage === 'date' && (
             <section className="stage-enter mx-auto mt-10 max-w-xl text-center sm:mt-16">
-              <h3 className="font-serif text-4xl font-medium tracking-tight sm:text-5xl">
+              <p className="tool-kicker">{t('stock screening · framework desk', 'penyaringan saham · meja framework')}</p>
+              <h3 className="tool-title display-xl font-serif">
                 {t("Find today's candidates", 'Temukan kandidat hari ini')}
               </h3>
-              <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
+              <p className="tool-subtitle mx-auto">
                 {t(
                   `Scan the IDX universe for the top ${numStocks} names, then refine them with broker summaries.`,
                   `Pindai semesta IDX untuk ${numStocks} nama teratas, lalu sempurnakan dengan ringkasan broker.`,
@@ -909,7 +910,7 @@ export default function StockScreeningPage() {
                     <div
                       ref={filtersPanelRef}
                       style={{ transformOrigin: 'top center' }}
-                      className="surface-glass ios-scroll absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line p-5 text-left"
+                      className="glass-surface ios-scroll absolute left-1/2 z-sticky mt-2 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-y-auto rounded-xl p-5 text-left"
                     >
                       <div className="space-y-4">
                         <div className="space-y-1.5">
@@ -918,7 +919,7 @@ export default function StockScreeningPage() {
                             id="category-filter"
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
-                            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                            className="tool-input px-3 py-2 text-sm"
                           >
                             {CATEGORIES.map((c) => (
                               <option key={c.id} value={c.id}>
@@ -966,7 +967,7 @@ export default function StockScreeningPage() {
 
                         <div className="space-y-1.5">
                           <FieldLabel>{t('Market cap', 'Kapitalisasi pasar')}</FieldLabel>
-                          <div className="flex flex-wrap gap-1 rounded-lg border border-line p-1">
+                          <div className="glass-surface flex flex-wrap gap-1 rounded-xl p-1">
                             {CAP_TIERS.map((tier) => {
                               const active =
                                 tier.id === 'every'
@@ -1005,7 +1006,7 @@ export default function StockScreeningPage() {
                               id="sector-filter"
                               value={sector}
                               onChange={(e) => setSector(e.target.value)}
-                              className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                              className="tool-input px-2.5 py-2 text-sm"
                             >
                               <option value="">{t('All sectors', 'Semua sektor')}</option>
                               {SECTORS.map((s) => (
@@ -1023,7 +1024,7 @@ export default function StockScreeningPage() {
                               value={boardRiskFilter}
                               onChange={(e) => setBoardRiskFilter(e.target.value)}
                               title={t('Optional — restricts the scan to a single IDX listing board.', 'Opsional — membatasi pemindaian ke satu papan pencatatan IDX.')}
-                              className="w-full rounded-md border border-line bg-paper px-2.5 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                              className="tool-input px-2.5 py-2 text-sm"
                             >
                               <option value="">{t('Any board', 'Semua papan')}</option>
                               <option value="high">{t('Special Monitoring', 'Pemantauan Khusus')}</option>
@@ -1041,7 +1042,7 @@ export default function StockScreeningPage() {
               </div>
 
                 {savedScreenings.length > 0 && (
-                  <div className="surface-raised mx-auto mt-14 max-w-md rounded-xl border border-line p-5 text-left">
+                  <div className="tool-panel mx-auto mt-14 max-w-md p-5 text-left">
                     <p className="text-sm font-medium">{t('Saved screenings', 'Penyaringan tersimpan')}</p>
                     <ul className="mt-3 space-y-2">
                       {savedScreenings.slice(0, 5).map((s, i) => (
@@ -1078,7 +1079,7 @@ export default function StockScreeningPage() {
       {/* ===== Error ===== */}
       {!loading && error && (
         <div className="py-10 text-center">
-          <div role="alert" className="mx-auto max-w-md rounded-md border border-neg/30 bg-neg-tint px-4 py-3">
+          <div role="alert" className="tool-panel-soft mx-auto max-w-md border-neg/30 bg-neg-tint px-4 py-3">
             <p className="text-sm text-neg">{error}</p>
           </div>
           <button
@@ -1093,8 +1094,8 @@ export default function StockScreeningPage() {
 
       {/* ===== Results ===== */}
       {awaitingBrokerUpload ? (
-        <article className="report-enter pt-8">
-          <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+        <article className="report-enter tool-panel mt-8 p-5 sm:p-7">
+          <header className="tool-masthead flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div>
               <p className="font-mono text-xs text-ink-muted">
                 {t('Closing screen', 'Penyaringan penutupan')}
@@ -1102,7 +1103,7 @@ export default function StockScreeningPage() {
                 {t(`${initialScreenings.length} candidate${initialScreenings.length === 1 ? '' : 's'}`, `${initialScreenings.length} kandidat`)}
                 {aiUsed && t(' · AI-enhanced', ' · ditingkatkan AI')}
               </p>
-              <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">{t('Candidates ready', 'Kandidat siap')}</h2>
+              <h2 className="display-xl mt-1 font-serif text-4xl font-medium tracking-tight">{t('Candidates ready', 'Kandidat siap')}</h2>
               <p className="mt-2 max-w-prose text-sm text-ink-muted">
                 {t(
                   'Optionally attach broker-summary screenshots, then re-rank to apply pack-hunting detection — or skip straight to the final ranking.',
@@ -1113,7 +1114,7 @@ export default function StockScreeningPage() {
             <QuietButton onClick={requestNewScreening}>{t('New screening', 'Penyaringan baru')}</QuietButton>
           </header>
 
-          <ul className="mt-6 divide-y divide-line">
+          <ul className="tool-table mt-6 divide-y divide-line">
             {initialScreenings.map((s, i) => {
               const owner = category === 'conglomerate' ? conglomerateOwner(s.ticker) : null;
               const expanded = expandedBandarTicker === s.ticker;
@@ -1229,15 +1230,15 @@ export default function StockScreeningPage() {
         </article>
       ) : (
         hasResults && !loading && (
-          <article className="report-enter pt-8">
-            <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+          <article className="report-enter tool-panel mt-8 p-5 sm:p-7">
+            <header className="tool-masthead flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
               <div>
                 <p className="font-mono text-xs text-ink-muted">
                   {t('Ranked', 'Diperingkat')} {asOfDate ? t(`· as of ${asOfDate}`, `· per ${asOfDate}`) : ''} ·{' '}
                   {analysisMode === 'midday' ? t('Midday', 'Tengah hari') : t('EOD close', 'Tutup EOD')}
                   {aiUsed && t(' · AI-enhanced', ' · ditingkatkan AI')}
                 </p>
-                <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">
+                <h2 className="display-xl mt-1 font-serif text-4xl font-medium tracking-tight">
                   {t(`Top ${screenings.length} candidate${screenings.length === 1 ? '' : 's'}`, `${screenings.length} kandidat teratas`)}
                 </h2>
                 <p className="mt-2 text-sm text-ink-muted">
@@ -1337,7 +1338,7 @@ export default function StockScreeningPage() {
             </div>
 
             {/* Refine step — attach broker summaries to re-rank */}
-            <div className="surface-raised mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line p-5">
+            <div className="tool-panel-soft mt-8 flex flex-wrap items-center justify-between gap-4 p-5">
               <div className="max-w-prose">
                 <p className="text-sm font-medium">
                   {reranked
@@ -1373,7 +1374,7 @@ export default function StockScreeningPage() {
                   value={screeningName}
                   onChange={(e) => setScreeningName(e.target.value)}
                   placeholder={t("e.g. 'Momentum leaders'", "mis. 'Pemimpin momentum'")}
-                  className="w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25"
+                  className="tool-input px-3.5 py-2.5 text-sm"
                 />
               </div>
               <PrimaryButton onClick={handleSaveScreening}>{t('Save list', 'Simpan daftar')}</PrimaryButton>

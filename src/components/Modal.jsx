@@ -99,7 +99,7 @@ export function Modal({ open, onClose, title, description, children, labelledByI
               type="button"
               onClick={handleClose}
               aria-label={t('Close', 'Tutup')}
-              className="tactile-soft -mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-ink-muted hover:bg-well hover:text-ink"
+              className="tap-target tactile-soft -mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-ink-muted hover:bg-well hover:text-ink"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />

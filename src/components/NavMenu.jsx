@@ -4,11 +4,12 @@ import { useT } from '../lib/i18n';
 import { useSpringPresence } from '../lib/useSpringPresence';
 import { presets } from '../lib/motion';
 
-// The four destinations, in nav order. `match` decides the active item from the
-// current pathname (the Live Screening default route answers to both '/' and
-// '/auto-screening', mirroring App's routing).
+// The destinations, in nav order. `match` decides the active item from the
+// current pathname. '/' is now the marketing landing page (Home); the live
+// screener has its own '/auto-screening' route, mirroring App's routing.
 const NAV = [
-  { to: '/', match: (p) => p === '/' || p === '/auto-screening', en: 'Live Screening', id: 'Penyaringan Langsung' },
+  { to: '/', match: (p) => p === '/', en: 'Home', id: 'Beranda' },
+  { to: '/auto-screening', match: (p) => p === '/auto-screening', en: 'Live Screening', id: 'Penyaringan Langsung' },
   { to: '/analysis', match: (p) => p === '/analysis', en: 'Stock Analysis', id: 'Analisis Saham' },
   { to: '/screening', match: (p) => p === '/screening', en: 'Stock Screening', id: 'Penyaringan Saham' },
   { to: '/api-status', match: (p) => p === '/api-status', en: 'API Status', id: 'Status API' },
@@ -83,7 +84,7 @@ export function NavMenu() {
         // Current page on hover/long-press keeps the breadcrumb cue the inline
         // label used to give, now that the trigger is icon-only.
         title={t(activeItem.en, activeItem.id)}
-        className={`tactile-soft inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper text-ink-muted shadow-sm shadow-ink/5 hover:text-ink sm:h-10 sm:w-10 ${
+        className={`tap-target tactile-soft inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper text-ink-muted shadow-sm shadow-ink/5 hover:text-ink sm:h-10 sm:w-10 ${
           open ? 'text-ink' : ''
         }`}
       >

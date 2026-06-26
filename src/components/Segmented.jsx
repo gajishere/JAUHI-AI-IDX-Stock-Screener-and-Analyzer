@@ -72,7 +72,14 @@ export function Segmented({
       ref={trackRef}
       role={role}
       aria-label={ariaLabel}
-      className={`relative inline-flex w-full items-center rounded-full border border-line bg-well/60 p-1 ${className}`}
+      // A solid, recessed track — NOT glass. The track used to be `.glass-surface`,
+      // but inside the (also-glass) settings popover that was glass-on-glass with
+      // an identical translucent fill, so the track had no edge and the inactive
+      // options read as faint text floating on the panel. An opaque `bg-well` track
+      // with a hairline + inset shadow gives the control a defined recess (the iOS
+      // segmented look), so the sliding green pill and the muted labels both read
+      // clearly on any surface, glass popover or plain page alike.
+      className={`relative inline-flex w-full items-center rounded-full border border-line bg-well p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] ${className}`}
     >
       {/* The sliding pill. Sits behind the buttons (z-0); they're lifted to z-1
           so their content stays crisp above the moving fill. Rests at the first
@@ -80,7 +87,7 @@ export function Segmented({
           to the measured active button. */}
       <span
         aria-hidden="true"
-        className="absolute top-1 bottom-1 left-1 z-0 rounded-full bg-brand shadow-sm shadow-brand/25"
+        className="glow-ring absolute top-1 bottom-1 left-1 z-0 rounded-full bg-brand shadow-[0_0_22px_color-mix(in_srgb,var(--c-brand)_32%,transparent)]"
         style={{
           width: pill ? `${pill.w}px` : `calc((100% - 8px) / ${count})`,
           transform: pill

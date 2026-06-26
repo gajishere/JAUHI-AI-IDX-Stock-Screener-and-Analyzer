@@ -592,7 +592,7 @@ export default function StockAnalysisPage() {
   const stepperCurrent = stage === 'buy' || stage === 'hold' ? 3 : stage === 'date' ? 2 : 1;
 
   return (
-    <div className="flex flex-col">
+    <div className="tool-page flex flex-col">
       {/* ===== Input flow (steps 1–3) ===== */}
       {stage !== 'report' && !loading && (
         <div className="py-2 sm:py-6">
@@ -601,10 +601,11 @@ export default function StockAnalysisPage() {
           {/* Step 1 — big centered search */}
           {stage === 'search' && (
             <section key="search" className="stage-enter mx-auto mt-9 max-w-2xl text-center sm:mt-12">
-              <h2 className="font-serif text-4xl font-medium tracking-tight sm:text-5xl">
+              <p className="tool-kicker">{t('stock analysis · single-name desk', 'analisis saham · meja emiten')}</p>
+              <h2 className="tool-title display-xl font-serif">
                 {t('Which stock?', 'Saham yang mana?')}
               </h2>
-              <p className="mt-3 text-sm text-ink-muted">
+              <p className="tool-subtitle mx-auto">
                 {t(
                   `Search all ${EMITEN_COUNT} IDX-listed companies by code or name.`,
                   `Cari ${EMITEN_COUNT} perusahaan tercatat di IDX berdasarkan kode atau nama.`,
@@ -632,7 +633,7 @@ export default function StockAnalysisPage() {
                     activeSuggestion >= 0 ? `ticker-option-${activeSuggestion}` : undefined
                   }
                   aria-autocomplete="list"
-                  className="tactile-soft w-full rounded-full border border-line bg-paper py-4 pl-16 pr-6 font-mono text-lg text-ink shadow-lg shadow-ink/5 placeholder:font-sans placeholder:text-ink-muted/70 hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
+                  className="tool-input py-4 pl-16 pr-6 font-mono text-lg placeholder:font-sans placeholder:text-ink-muted/70"
                 />
                 {suggestionsMounted && suggestedTickers.length > 0 && (
                   <ul
@@ -685,13 +686,13 @@ export default function StockAnalysisPage() {
               <button
                 type="button"
                 onClick={() => setStage('search')}
-                className="tactile-soft mx-auto mb-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-paper pl-3 pr-4 text-sm transition-colors hover:border-ink-muted/50 hover:-translate-y-px"
+                className="glass-quiet tactile-soft mx-auto mb-6 inline-flex min-h-11 items-center gap-2 pl-3 pr-4 text-sm transition-colors hover:-translate-y-px"
               >
                 <span className="text-ink-muted">‹ {t('Change', 'Ubah')}</span>
                 <span className="font-mono font-semibold">{ticker}</span>
                 <span className="hidden text-ink-muted sm:inline">· {selectedEmiten?.name}</span>
               </button>
-              <h2 className="font-serif text-3xl font-medium tracking-tight sm:text-4xl">
+              <h2 className="display-xl font-serif text-3xl font-medium tracking-tight sm:text-4xl">
                 {t('As of which date?', 'Per tanggal berapa?')}
               </h2>
               <p className="mt-3 text-sm text-ink-muted">
@@ -734,7 +735,7 @@ export default function StockAnalysisPage() {
                 <span className="hidden text-ink-muted sm:inline">· {date}</span>
               </button>
 
-              <h2 className="font-serif text-3xl font-medium tracking-tight sm:text-4xl">
+              <h2 className="display-xl font-serif text-3xl font-medium tracking-tight sm:text-4xl">
                 {stage === 'buy'
                   ? t('Is it worth buying?', 'Layak dibeli?')
                   : t('Hold or sell?', 'Tahan atau jual?')}
@@ -765,7 +766,7 @@ export default function StockAnalysisPage() {
                       value={entryPrice}
                       onChange={(e) => setEntryPrice(e.target.value)}
                       placeholder={t('e.g. 4500', 'mis. 4500')}
-                      className="w-full rounded-lg border border-line bg-paper px-4 py-3 font-mono text-base text-ink shadow-sm transition-colors placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="tool-input px-4 py-3 font-mono text-base placeholder:font-sans [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                   <div>
@@ -778,7 +779,7 @@ export default function StockAnalysisPage() {
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       placeholder={t('e.g. 1000', 'mis. 1000')}
-                      className="w-full rounded-lg border border-line bg-paper px-4 py-3 font-mono text-base text-ink shadow-sm transition-colors placeholder:font-sans placeholder:text-ink-muted hover:border-ink-muted/50 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="tool-input px-4 py-3 font-mono text-base placeholder:font-sans [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                 </div>
@@ -832,7 +833,7 @@ export default function StockAnalysisPage() {
                     )}
               </p>
               {error && (
-                <div role="alert" className="mt-5 rounded-md border border-neg/30 bg-neg-tint px-4 py-3 text-left">
+                <div role="alert" className="tool-panel-soft mt-5 border-neg/30 bg-neg-tint px-4 py-3 text-left">
                   <p className="text-sm font-medium text-neg">{t('Could not build the note', 'Tidak dapat menyusun catatan')}</p>
                   <p className="mt-1 text-sm text-ink">{error}</p>
                 </div>
@@ -935,7 +936,7 @@ export default function StockAnalysisPage() {
 
       {/* ===== Report ===== */}
       {stage === 'report' && analysis && (
-        <article className="report-enter">
+        <article className="report-enter tool-panel p-5 sm:p-7">
           <div className="mb-8 flex items-center justify-between gap-4">
             <p className="font-mono text-xs text-ink-muted">{t('Analysis complete', 'Analisis selesai')}</p>
             <QuietButton onClick={() => setConfirmNew(true)}>{t('New analysis', 'Analisis baru')}</QuietButton>
@@ -975,15 +976,15 @@ export default function StockAnalysisPage() {
           <div className={`report-enter details-collapse ${!intent || showFullReport ? 'details-collapse-open' : ''} mt-8`}>
           <div>
           {/* Report masthead */}
-          <header className="relative border-b border-line pb-6">
+          <header className="tool-masthead relative">
             <div className="relative flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
               <div>
-                <p className="font-mono text-xs text-ink-muted">
+                <p className="tool-kicker">
                   {t('Equity flow note · session', 'Catatan aliran saham · sesi')} {analysis.asOf}
                   {analysis.asOf !== analysis.date &&
                     t(` (last trade before ${analysis.date})`, ` (transaksi terakhir sebelum ${analysis.date})`)}
                 </p>
-                <h2 className="mt-1 font-serif text-6xl font-medium tracking-tighter leading-none">
+                <h2 className="display-xl mt-1 font-serif text-6xl font-medium tracking-tighter leading-none">
                   {analysis.ticker}
                 </h2>
                 <p className="mt-2 text-sm text-ink-muted max-w-prose">
@@ -1185,7 +1186,7 @@ export default function StockAnalysisPage() {
                 {news.articles.length > 0 && (
                   <ul className="mt-2 space-y-2">
                     {news.articles.map((a, i) => (
-                      <li key={i} className="list-item-enter rounded-md border border-line bg-paper/60 px-3 py-2" style={{ '--i': i }}>
+                      <li key={i} className="list-item-enter tool-panel-soft px-3 py-2" style={{ '--i': i }}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             {a.url ? (

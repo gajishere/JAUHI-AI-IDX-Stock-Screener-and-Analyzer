@@ -78,7 +78,7 @@ function DetailSection({ section }) {
         </div>
       )}
       {section.code && (
-        <pre className="mt-3 max-h-56 overflow-auto rounded-md bg-well p-3 text-xs text-ink-muted">
+        <pre className="tool-panel-soft mt-3 max-h-56 overflow-auto p-3 text-xs text-ink-muted">
           {section.code}
         </pre>
       )}
@@ -129,7 +129,7 @@ function ServicePanel({ title, subtitle, snapshot, statusLabel, t }) {
       </div>
 
       {snapshot.lastError && (
-        <div role="alert" className="mt-4 rounded-md border border-neg/30 bg-neg-tint px-4 py-3">
+        <div role="alert" className="tool-panel-soft mt-4 border-neg/30 bg-neg-tint px-4 py-3">
           <p className="text-sm text-neg">{snapshot.lastError}</p>
         </div>
       )}
@@ -199,18 +199,18 @@ export default function ApiStatusPage() {
   };
 
   return (
-    <div className="report-enter">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+    <div className="tool-page report-enter">
+      <header className="tool-masthead flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div>
-          <p className="font-mono text-xs text-ink-muted">{t('Claude & IDX runtime', 'Runtime Claude & IDX')}</p>
-          <h2 className="mt-1 font-serif text-4xl font-medium tracking-tight">{t('API Status', 'Status API')}</h2>
+          <p className="tool-kicker">{t('Claude & IDX runtime', 'Runtime Claude & IDX')}</p>
+          <h2 className="tool-title display-xl font-serif">{t('API Status', 'Status API')}</h2>
         </div>
         <PrimaryButton onClick={runHealthCheck} loading={checking}>
           {t('Run live check', 'Jalankan pemeriksaan langsung')}
         </PrimaryButton>
       </header>
 
-      <div className="space-y-6">
+      <div className="mt-8 space-y-6">
         <ServicePanel
           title={t('Claude', 'Claude')}
           subtitle={t('AI analysis', 'Analisis AI')}
@@ -235,44 +235,46 @@ export default function ApiStatusPage() {
           </p>
 
           {logs.length > 0 ? (
-            <ol className="divide-y divide-line border-y border-line">
+            <ol className="tool-table divide-y divide-line">
               {logs.map((log, i) => (
-                <li key={log.id} className="list-item-enter grid gap-3 py-4 md:grid-cols-[8rem_1fr]" style={{ '--i': Math.min(i, 9) }}>
-                  <div>
-                    <p className="font-mono text-xs text-ink-muted">{formatTime(log.at)}</p>
-                    <Pill tone={logPillTone(log.level)} className="mt-2">
-                      {log.source}
-                    </Pill>
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <p className="text-sm font-medium">{log.title}</p>
+                <li key={log.id} className="list-item-enter px-4 py-4 sm:px-5" style={{ '--i': Math.min(i, 9) }}>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                        <span className="font-mono text-xs tabular-nums text-ink-muted">{formatTime(log.at)}</span>
+                        <Pill tone={logPillTone(log.level)}>
+                          {log.source}
+                        </Pill>
+                        <p className="min-w-0 text-sm font-semibold text-ink">{log.title}</p>
+                      </div>
+                      {log.summary && <p className="mt-3 text-sm leading-relaxed text-ink-muted">{log.summary}</p>}
+                      {log.details && <p className="mt-2 font-mono text-xs text-ink-muted">{log.details}</p>}
+                    </div>
+                    <div className="flex justify-start sm:justify-end">
                       {hasEvidence(log) && (
                         <button
                           type="button"
                           onClick={() => toggleDetails(log.id)}
                           aria-expanded={expanded.has(log.id)}
-                          className="tactile-soft spring-color inline-flex min-h-11 items-center rounded-md border border-line px-3 text-xs font-medium text-ink-muted hover:border-ink-muted hover:text-ink sm:min-h-8"
+                          className="glass-quiet tactile-soft spring-color inline-flex min-h-11 items-center px-3 text-xs font-medium text-ink-muted hover:text-ink sm:min-h-8"
                         >
                           {expanded.has(log.id) ? t('Hide details', 'Sembunyikan detail') : t('Details', 'Detail')}
                         </button>
                       )}
                     </div>
-                    {log.summary && <p className="mt-1 text-sm leading-relaxed text-ink-muted">{log.summary}</p>}
-                    {log.details && <p className="mt-2 font-mono text-xs text-ink-muted">{log.details}</p>}
-                    <div className={`details-collapse ${expanded.has(log.id) ? 'details-collapse-open' : ''}`} aria-hidden={!expanded.has(log.id)}>
-                      <div>
-                        <div className="mt-4 space-y-4 rounded-lg border border-line bg-well/30 p-4">
-                          {log.evidence?.note && (
-                            <p className="text-xs leading-relaxed text-ink-muted">{log.evidence.note}</p>
-                          )}
-                          {log.evidence?.sections?.map((section, index) => (
-                            <DetailSection key={`${log.id}-${section.title}-${index}`} section={section} />
-                          ))}
-                          {!log.evidence?.sections?.length && log.details && (
-                            <DetailSection section={{ title: t('Details', 'Detail'), text: log.details }} />
-                          )}
-                        </div>
+                  </div>
+                  <div className={`details-collapse ${expanded.has(log.id) ? 'details-collapse-open' : ''}`} aria-hidden={!expanded.has(log.id)}>
+                    <div>
+                      <div className="tool-panel-soft mt-4 space-y-4 p-4">
+                        {log.evidence?.note && (
+                          <p className="text-xs leading-relaxed text-ink-muted">{log.evidence.note}</p>
+                        )}
+                        {log.evidence?.sections?.map((section, index) => (
+                          <DetailSection key={`${log.id}-${section.title}-${index}`} section={section} />
+                        ))}
+                        {!log.evidence?.sections?.length && log.details && (
+                          <DetailSection section={{ title: t('Details', 'Detail'), text: log.details }} />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -280,7 +282,7 @@ export default function ApiStatusPage() {
               ))}
             </ol>
           ) : (
-            <div className="rounded-lg border border-line p-5 text-sm text-ink-muted">
+            <div className="tool-panel-soft p-5 text-sm text-ink-muted">
               {t('No API activity has been recorded in this session.', 'Belum ada aktivitas API yang tercatat pada sesi ini.')}
             </div>
           )}

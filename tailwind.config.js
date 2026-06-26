@@ -41,8 +41,12 @@ export default {
         'warn-tint': 'var(--c-warn-tint)',
       },
       fontFamily: {
-        serif: ['Newsreader', 'Georgia', 'Cambria', 'serif'],
-        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        // Cosmoq adopts Inter for both display and body. `serif` is kept as the
+        // alias the existing headings reference, now resolving to Inter so every
+        // masthead/section title becomes the tight-tracked Inter display face
+        // without touching every call site (the .display tracking is in index.css).
+        serif: ['Inter', '"Inter Placeholder"', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '"Inter Placeholder"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       zIndex: {

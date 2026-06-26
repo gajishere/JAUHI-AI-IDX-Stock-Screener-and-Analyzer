@@ -88,7 +88,7 @@ export function SettingsMenu() {
         aria-label={t('Settings', 'Pengaturan')}
         title={t('Settings', 'Pengaturan')}
         data-open={open}
-        className={`settings-trigger tactile-soft inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper text-ink-muted shadow-sm shadow-ink/5 hover:text-ink sm:h-10 sm:w-10 ${
+        className={`settings-trigger tap-target tactile-soft inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-paper text-ink-muted shadow-sm shadow-ink/5 hover:text-ink sm:h-10 sm:w-10 ${
           open ? 'text-ink' : ''
         }`}
       >
@@ -103,7 +103,7 @@ export function SettingsMenu() {
           className="glass-surface absolute right-0 top-[calc(100%+0.5rem)] z-dropdown w-64 max-w-[calc(100vw-1.5rem)] rounded-xl p-4"
           style={{ transformOrigin: 'top right' }}
         >
-          <div>
+          <div className="settings-reveal" style={{ '--i': 0 }}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Appearance', 'Tampilan')}
             </p>
@@ -124,7 +124,7 @@ export function SettingsMenu() {
             />
           </div>
 
-          <div className="mt-4 border-t border-line pt-4">
+          <div className="settings-reveal mt-4 border-t border-line pt-4" style={{ '--i': 1 }}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Sound', 'Suara')}
             </p>
@@ -152,7 +152,7 @@ export function SettingsMenu() {
             </p>
           </div>
 
-          <div className="mt-4 border-t border-line pt-4">
+          <div className="settings-reveal mt-4 border-t border-line pt-4" style={{ '--i': 2 }}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               {t('Language', 'Bahasa')}
             </p>

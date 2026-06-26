@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { presets, withReducedMotion } from './motion';
+
+// These hooks drive enter/exit in a LAYOUT effect (synchronous, after the DOM mutation
+// but BEFORE the browser paints) so a freshly-mounted node starts from keyframe[0] —
+// opacity 0, scaled down — with no one-frame flash of the final state. They only ever
+// run for client-only chrome (modals, the settings popover), never server-rendered, so
+// useLayoutEffect is safe here.
 
 // Interruptible enter/exit presence for floating chrome (modals, popovers, dropdowns).
 //
@@ -32,7 +38,7 @@ export function useSpringPresence(open, enterPreset, exitPreset) {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // When opening, ensure the node is mounted so we have something to animate. This
     // setState is the React↔WAAPI bridge: WAAPI is an external system that needs the
     // DOM node present before element.animate() can run, and React owns whether the
@@ -64,10 +70,15 @@ export function useSpringPresence(open, enterPreset, exitPreset) {
         // If a new enter superseded us, onfinish won't fire — leave mounted as-is.
       };
     }
-    // enterPreset/exitPreset are stable module constants (presets.* from motion.js);
-    // intentionally excluded — re-running the effect only on `open` is the contract.
+    // `mounted` is in the deps for the FIRST-OPEN case: when `open` flips true the
+    // node isn't in the DOM yet, so this effect's first run bails at `if (!node)`
+    // after scheduling the mount. Including `mounted` makes the effect run again
+    // once setMounted(true) commits the node — that second run finds the node and
+    // plays the enter. Without it, the panel mounts but never animates (it just
+    // appears). enterPreset/exitPreset are stable module constants (presets.* from
+    // motion.js), intentionally excluded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, mounted]);
 
   return { mounted, nodeRef };
 }
@@ -83,7 +94,7 @@ export function useBackdropPresence(open) {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted((m) => m || true);
@@ -106,7 +117,9 @@ export function useBackdropPresence(open) {
       );
       anim.onfinish = () => setMounted(false);
     }
-  }, [open]);
+    // `mounted` included so the freshly-mounted backdrop plays its fade on first
+    // open too (same first-open fix as useSpringPresence above).
+  }, [open, mounted]);
 
   return { mounted, ref };
 }
