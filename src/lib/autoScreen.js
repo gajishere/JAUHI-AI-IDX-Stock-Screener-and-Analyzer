@@ -473,6 +473,7 @@ async function screenSentimentDiscounts(date, count, { marketOpen = false } = {}
     // must mirror it — only then does "MA200-broken N" actually mean "N names
     // breach even the deepest MA200 floor", i.e. genuine falling knives.
     reasons: { liq: 0, noMa: 0, ma200: 0, ma50: 0, rsi: 0 },
+    qualityRejects: [], // per-name {ticker,roe,per,der} for names dropped at the quality gate
   };
 
   let scan;
@@ -541,22 +542,28 @@ async function screenSentimentDiscounts(date, count, { marketOpen = false } = {}
   // Instead, treat null fundamentals as a soft pass (unknown quality is still
   // candidate quality); only KNOWN bad values are hard disqualifying.
   //
-  // Thresholds are relaxed for IDX market reality:
-  //   PER: ceiling raised to 25× (was 20×) — BBCA, TLKM etc. structurally trade >20×
-  //   PBV: removed as a hard gate; used only in the scoring step below (many quality
-  //        IDX consumer/finance names structurally exceed 3×)
-  //   ROE: >10% still required IF known — the only ratio that truly signals quality
-  //   DER: ≤2.0 (was 1.5) — telco/infra names carry structural leverage legitimately
+  // Thresholds are relaxed for IDX market reality and for the deep-discount thesis:
+  //   PER: ceiling 35× (was 25×) — many quality IDX names (consumer/finance) structurally
+  //        trade >25×; a retreat that dips a 30× name below MA50 is still a discount.
+  //   PBV: removed as a hard gate; used only in the scoring step below.
+  //   ROE: >5% required IF known (was 10%) — a genuinely-profitable-but-thin name caught
+  //        in a sentiment retreat is still candidate quality; only loss-makers fail.
+  //   DER: ≤2.0 — telco/infra names carry structural leverage legitimately.
+  // Softened further because the deep tier already filters hard on technicals
+  // (RSI washed, systemic MA200 breach) — piling a strict fundamental bar on top
+  // emptied the section of the one survivor the deep tier exists to surface.
+  const qualityRejects = []; // { ticker, roe, per, der } — diagnostic only
   const quality = withFun.filter((d) => {
     const f = d.fundamentals;
     // null fundamentals = Yahoo gap, not a red flag — let it through
     if (!f) return true;
-    if (f.roe != null && f.roe <= 0.1) return false; // known unprofitable → hard fail
-    if (f.per != null && (f.per <= 0 || f.per > 25)) return false; // known loss-maker or expensive
-    if (f.debtToEquity != null && f.debtToEquity > 2.0) return false; // excessive leverage
+    if (f.roe != null && f.roe <= 0.05) { qualityRejects.push({ ticker: d.ticker, roe: f.roe, per: f.per, der: f.debtToEquity }); return false; } // known loss-maker/thin → hard fail
+    if (f.per != null && (f.per <= 0 || f.per > 35)) { qualityRejects.push({ ticker: d.ticker, roe: f.roe, per: f.per, der: f.debtToEquity }); return false; } // known loss-maker or expensive
+    if (f.debtToEquity != null && f.debtToEquity > 2.0) { qualityRejects.push({ ticker: d.ticker, roe: f.roe, per: f.per, der: f.debtToEquity }); return false; } // excessive leverage
     return true;
   });
   funnel.quality = quality.length;
+  funnel.qualityRejects = qualityRejects; // per-name binding reason, so an empty section names the culprit
   if (quality.length === 0) return { cards: [], funnel };
 
   // Rank: deepest discount among the best quality (below-MA50 gap × ROE).
@@ -920,7 +927,9 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     ` [seed ${df.seed}→tech ${df.technical}${df.depth ? ` ${df.depth}` : ''}→qual ${df.quality}` +
     (df.technical === 0
       ? `; rejects: MA200-broken ${df.reasons.ma200}, not-below-MA50 ${df.reasons.ma50}, RSI-off ${df.reasons.rsi}, illiquid ${df.reasons.liq}`
-      : '') +
+      : discounts.length === 0 && df.qualityRejects?.length
+        ? `; quality-rejects: ${df.qualityRejects.map((r) => `${r.ticker}(ROE ${r.roe != null ? Math.round(r.roe * 100) + '%' : '?'}/PER ${r.per ?? '?'}/DER ${r.der ?? '?'})`).join(', ')}`
+        : '') +
     `]`;
 
   const slot = owningScanSlot(now);
