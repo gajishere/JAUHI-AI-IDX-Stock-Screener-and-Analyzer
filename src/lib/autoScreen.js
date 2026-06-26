@@ -425,13 +425,15 @@ function passesDiscountGate(d, { rsiCeil, ma200Mult, bandMult }) {
 // because something broke* — the strict/shallow falling-knife guard (which
 // assumes a below-MA200 name is broken) then silently drops them, leaving the
 // section empty exactly when the "sentiment discount" thesis should fire. DEEP
-// tolerates a far larger MA200 breach, but tightens RSI (≤45) so only genuinely
-// washed-out names surface — limiting falling-knife risk. In a green tape RSI
-// rarely washes this low, so DEEP effectively never fires there.
+// relaxes ONLY the MA200 floor (×0.88, up to 12% under) — the falling-knife
+// dimension — while keeping RSI/band at shallow's looser level. Tightening RSI
+// here (an earlier attempt) was wrong: a name in a fresh retreat breaches MA200
+// *before* its RSI fully washes, so a ≤45 RSI gate killed the very names DEEP
+// exists to catch. In a green tape MA200 stays intact, so DEEP never fires there.
 const DISCOUNT_TIERS = [
   { depth: 'strict', rsiCeil: 52, ma200Mult: 0.97, bandMult: 1.01 },
   { depth: 'shallow', rsiCeil: 58, ma200Mult: 0.93, bandMult: 1.03 },
-  { depth: 'deep', rsiCeil: 45, ma200Mult: 0.88, bandMult: 1.05 },
+  { depth: 'deep', rsiCeil: 58, ma200Mult: 0.88, bandMult: 1.05 },
 ];
 
 // Tier C screener. Seeds from the non-bank quality universe (≥ Rp1T, size-ranked
@@ -463,7 +465,13 @@ async function screenSentimentDiscounts(date, count, { marketOpen = false } = {}
     depth: null,
     quality: 0,
     final: 0,
-    // strict-tier rejection reasons (each name counted once, first failure wins)
+    // rejection reasons tallied against the LOOSEST tier (each name counted
+    // once, first failure wins). Evaluating strict hid the truth: a name that
+    // fails strict-MA200 but passes deep-MA200 was dumped into `ma200` even
+    // though MA200 wasn't its binding problem once deep was in the ladder. The
+    // loosest tier is the real gate that empties the section, so reject reasons
+    // must mirror it — only then does "MA200-broken N" actually mean "N names
+    // breach even the deepest MA200 floor", i.e. genuine falling knives.
     reasons: { liq: 0, noMa: 0, ma200: 0, ma50: 0, rsi: 0 },
   };
 
@@ -483,16 +491,18 @@ async function screenSentimentDiscounts(date, count, { marketOpen = false } = {}
   ).filter(Boolean);
   funnel.enriched = enriched.length;
 
-  // Tally why the STRICT tier rejects each enriched name (same conditions as
+  // Tally why the LOOSEST tier rejects each enriched name (same conditions as
   // passesDiscountGate, in order, so the first failure is the dominant reason).
-  const st = DISCOUNT_TIERS[0];
+  // The loosest tier is what actually empties the section, so its thresholds are
+  // the ones a surviving name must beat — making the reject tally truthful.
+  const loose = DISCOUNT_TIERS[DISCOUNT_TIERS.length - 1];
   for (const d of enriched) {
     const s = d.signals ?? {};
     if (d.marketCap == null || d.marketCap < 1e12 || d.lastValueTraded < DISCOUNT_MIN_TURNOVER) { funnel.reasons.liq++; continue; }
     if (s.sma200 == null || s.sma50 == null || d.close == null) { funnel.reasons.noMa++; continue; }
-    if (d.close < s.sma200 * st.ma200Mult) { funnel.reasons.ma200++; continue; } // trend broken (falling knife)
-    if (d.close >= s.sma50 * st.bandMult) { funnel.reasons.ma50++; continue; } // not below the mean (no discount)
-    if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > st.rsiCeil) { funnel.reasons.rsi++; continue; } // RSI out of the washed-but-not-crashed band
+    if (d.close < s.sma200 * loose.ma200Mult) { funnel.reasons.ma200++; continue; } // trend broken (falling knife)
+    if (d.close >= s.sma50 * loose.bandMult) { funnel.reasons.ma50++; continue; } // not below the mean (no discount)
+    if (s.rsi14 == null || s.rsi14 < 30 || s.rsi14 > loose.rsiCeil) { funnel.reasons.rsi++; continue; } // RSI out of the washed-but-not-crashed band
   }
 
   // Cheap technical gate, run as a relaxation LADDER (mirrors the A/B momentum
