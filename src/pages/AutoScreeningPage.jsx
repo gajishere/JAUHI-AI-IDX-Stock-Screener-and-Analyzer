@@ -400,6 +400,9 @@ function DiscountRow({ c, rank, index, planExpanded, onTogglePlan, scanType }) {
               {c.depth === 'shallow' && (
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">{t('shallow', 'dangkal')}</span>
               )}
+              {c.depth === 'deep' && (
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-warn">{t('deep', 'dalam')}</span>
+              )}
               {c.board === 'Pemantauan Khusus' && (
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-warn">{t('monitored', 'pemantauan')}</span>
               )}

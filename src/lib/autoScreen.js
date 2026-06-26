@@ -335,7 +335,7 @@ function serializeDiscount(d) {
   const depth = d._depth ?? 'strict';
   return {
     kind: 'discount',
-    depth, // 'strict' (headline thesis) | 'shallow' (relaxed fallback tier)
+    depth, // 'strict' (headline thesis) | 'shallow' (relaxed fallback tier) | 'deep' (sustained-retreat washout)
     ticker: d.ticker,
     name: d.name ?? null,
     sector: d.sector ?? null,
@@ -387,7 +387,7 @@ function serializeDiscount(d) {
       if (s.rsi14 != null) parts.push(`RSI ${Math.round(s.rsi14)}`);
       if (f.roe != null) parts.push(`ROE ${(f.roe * 100).toFixed(0)}%`);
       if (f.per != null && f.per > 0) parts.push(`PER ${f.per.toFixed(1)}×`);
-      const label = depth === 'shallow' ? 'Shallow discount' : 'Sentiment discount';
+      const label = depth === 'shallow' ? 'Shallow discount' : depth === 'deep' ? 'Deep discount' : 'Sentiment discount';
       return `${label} — ${parts.join(', ') || 'oversold quality'}`;
     })(),
   };
@@ -419,9 +419,19 @@ function passesDiscountGate(d, { rsiCeil, ma200Mult, bandMult }) {
 // only fires when STRICT is empty. STRICT already runs looser than the original
 // gate: RSI ceiling 52 (was 48) and a 1% band around MA50 so names hovering at
 // the mean still count.
+//
+// DEEP is the final fallback for a sustained broad retreat: during a multi-day
+// red IHSG streak, quality blue chips breach MA200 *because of sentiment, not
+// because something broke* — the strict/shallow falling-knife guard (which
+// assumes a below-MA200 name is broken) then silently drops them, leaving the
+// section empty exactly when the "sentiment discount" thesis should fire. DEEP
+// tolerates a far larger MA200 breach, but tightens RSI (≤45) so only genuinely
+// washed-out names surface — limiting falling-knife risk. In a green tape RSI
+// rarely washes this low, so DEEP effectively never fires there.
 const DISCOUNT_TIERS = [
   { depth: 'strict', rsiCeil: 52, ma200Mult: 0.97, bandMult: 1.01 },
   { depth: 'shallow', rsiCeil: 58, ma200Mult: 0.93, bandMult: 1.03 },
+  { depth: 'deep', rsiCeil: 45, ma200Mult: 0.88, bandMult: 1.05 },
 ];
 
 // Tier C screener. Seeds from the non-bank quality universe (≥ Rp1T, size-ranked
