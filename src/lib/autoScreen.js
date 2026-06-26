@@ -889,6 +889,14 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     `]`;
 
   const slot = owningScanSlot(now);
+
+  // Embed the actual tickers in the summary so the cron log line is
+  // self-contained — without these, "top 3" tells you nothing about WHICH 3.
+  // Brackets distinguish the ticker lists from the parenthetical counts.
+  const topTickers = candidates.map((c) => c.ticker).filter(Boolean).join(', ');
+  const discountTickers = discounts.map((c) => c.ticker).filter(Boolean).join(', ');
+  const recognizableTickers = recognizable.map((c) => c.ticker).filter(Boolean).join(', ');
+
   return {
     generatedAt: new Date().toISOString(),
     wibDate: date,
@@ -911,8 +919,11 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
       (leaderShown > 0 ? ` + ${leaderShown} trend leader` : '') +
       (relaxedShown > 0 ? ` + ${relaxedShown} relaxed backfill` : '') +
       ` → top ${candidates.length}` +
+      (topTickers ? ` [${topTickers}]` : '') +
       `; ${discountReport}` +
+      (discountTickers ? ` [${discountTickers}]` : '') +
       `; ${recognizable.length} liquid & familiar` +
+      (recognizableTickers ? ` [${recognizableTickers}]` : '') +
       (ihsg?.changePct != null ? ` (IHSG ${ihsg.changePct >= 0 ? '+' : ''}${ihsg.changePct.toFixed(2)}%)` : '') +
       `.`,
   };

@@ -63,6 +63,9 @@ export default async function handler(req, res) {
     // Persist to Vercel Blob (dynamic import so a missing package surfaces as a
     // clear runtime error rather than blocking unrelated routes).
     const { put } = await import('@vercel/blob');
+
+    // Rolling "latest" copy that every visitor reads. allowOverwrite keeps the
+    // path stable so the public URL never changes.
     const blob = await put(LATEST_BLOB_PATH, JSON.stringify(snapshot), {
       access: 'public',
       contentType: 'application/json',
@@ -70,6 +73,30 @@ export default async function handler(req, res) {
       allowOverwrite: true,
       cacheControlMaxAge: 0, // the read endpoint adds its own short CDN cache
     });
+
+    // Append-only history copy keyed by scan slot, so each run is recoverable
+    // even after latest.json is overwritten. Path layout mirrors the public
+    // prefix and includes the date + slot (slot is null on manual runs → "manual"):
+    //   auto-screen/history/2026-06-26/13-30.json
+    //   auto-screen/history/2026-06-26/19-45-manual.json
+    // Best-effort: a history write failure must not fail the whole run.
+    let historyUrl = null;
+    try {
+      const slotKey = snapshot.scanSlot
+        ? snapshot.scanSlot.replace(':', '-') // "13:30" → "13-30"
+        : `manual-${snapshot.wibTime?.replace(':', '-') ?? 'unknown'}`;
+      const historyPath = `auto-screen/history/${snapshot.wibDate}/${slotKey}.json`;
+      const historyBlob = await put(historyPath, JSON.stringify(snapshot), {
+        access: 'public',
+        contentType: 'application/json',
+        addRandomSuffix: false,
+        allowOverwrite: true, // re-runs of the same slot overwrite cleanly
+        cacheControlMaxAge: 0,
+      });
+      historyUrl = historyBlob.url;
+    } catch {
+      /* history is best-effort — latest.json is the source of truth */
+    }
 
     return res.status(200).json({
       ok: true,
@@ -79,6 +106,7 @@ export default async function handler(req, res) {
       count: snapshot.count,
       summary: snapshot.summary,
       url: blob.url,
+      historyUrl,
     });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err?.message || String(err) });
