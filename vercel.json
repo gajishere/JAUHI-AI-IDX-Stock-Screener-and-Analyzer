@@ -11,6 +11,10 @@
     {
       "source": "/idx/:path*",
       "destination": "/api/idx?path=/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
