@@ -55,7 +55,7 @@ import { findEmiten } from './universe.js';
 import { scanUniverse, mapLimit } from './screeningUniverse.js';
 import { getCategory, matchesCategory } from './screeningCategories.js';
 import { conglomerateGroup, CONGLOMERATE_TICKERS } from '../data/conglomerates.js';
-import { wibNow, marketStatus, owningScanSlot } from './marketHours.js';
+import { wibNow, marketStatus, owningScanSlot, isMarketOpen } from './marketHours.js';
 
 const RANGE = '1y'; // enough history for MA200 / RSI(14)
 const ENRICH_CONCURRENCY = 5; // Yahoo charts (free, proxied)
@@ -124,7 +124,7 @@ function passesVelocity(candles) {
 // Deep-enrich one ticker with a Yahoo chart and the locked screening score.
 // Returns a scored candidate (carrying chart + emiten info for the bandar
 // re-score), or null if unscoreable.
-async function enrich(ticker, date) {
+async function enrich(ticker, date, { marketOpen = false } = {}) {
   const chart = await fetchSymbolChart(`${ticker}.JK`, RANGE);
   const asOfCandles = chart?.candles?.filter((c) => c.date <= date) ?? [];
   if (asOfCandles.length < 30) return null;
@@ -170,12 +170,20 @@ async function enrich(ticker, date) {
   const recentHighs = asOfCandles.slice(-10).map((c) => c.high);
   const swingHigh10 = recentHighs.length ? Math.max(...recentHighs) : lastCandle?.high ?? 0;
   const entryRef = lastCandle?.close ?? 0;
+  // Flag whether the entry anchor is a SETTLED daily close or a LIVE intraday
+  // print. A 09:00 scan passes Yahoo's date filter (`c.date <= date`) with
+  // today's still-forming candle, so entry drifts as the session moves — without
+  // this flag, a persisted snapshot's plan can be mistaken for a settled daily
+  // plan. 'live' only when the market is open AND the last candle is today's
+  // (open market but no today-candle yet → yesterday's settled close → 'settled').
+  const lastIsToday = !!lastCandle && lastCandle.date === date;
+  const planAsOf = marketOpen && lastIsToday ? 'live' : 'settled';
   const plan = entryRef > 0 && atr14 > 0 ? (() => {
     const stop = Math.max(swingLow10, entryRef - 1.5 * atr14);
     const t1 = entryRef + 2 * atr14;
     const t2 = entryRef + 3.5 * atr14;
     const rr = stop < entryRef ? (t1 - entryRef) / (entryRef - stop) : null;
-    return { entry: entryRef, stop, t1, t2, rr, atr14Pct: atr14 / entryRef, swingHigh10 };
+    return { entry: entryRef, stop, t1, t2, rr, atr14Pct: atr14 / entryRef, swingHigh10, planAsOf };
   })() : null;
 
   return {
@@ -256,6 +264,7 @@ function serialize(d, category) {
       rr: d.plan.rr != null ? Math.round(d.plan.rr * 10) / 10 : null,
       atr14Pct: Math.round(d.plan.atr14Pct * 1000) / 1000,
       swingHigh10: Math.round(d.plan.swingHigh10),
+      planAsOf: d.plan.planAsOf ?? 'settled',
     } : null,
     reason: (() => {
       try {
@@ -315,7 +324,7 @@ function discountPlanFrom(d) {
   const t1 = sma50 != null && sma50 > p.entry ? sma50 : p.entry + 2 * atr; // mean reversion
   const t2 = Math.max(p.swingHigh10, p.entry + 3.5 * atr); // back toward pre-selloff high
   const rr = p.stop < p.entry ? (t1 - p.entry) / (p.entry - p.stop) : null;
-  return { entry: p.entry, stop: p.stop, t1, t2, rr, atr14Pct: p.atr14Pct, swingHigh10: p.swingHigh10 };
+  return { entry: p.entry, stop: p.stop, t1, t2, rr, atr14Pct: p.atr14Pct, swingHigh10: p.swingHigh10, planAsOf: p.planAsOf ?? 'settled' };
 }
 
 // Shape a compact, JSON-safe sentiment-discount card for the snapshot.
@@ -356,6 +365,7 @@ function serializeDiscount(d) {
           rr: plan.rr != null ? Math.round(plan.rr * 10) / 10 : null,
           atr14Pct: Math.round(plan.atr14Pct * 1000) / 1000,
           swingHigh10: Math.round(plan.swingHigh10),
+          planAsOf: plan.planAsOf ?? 'settled',
         }
       : null,
     live: d.live
@@ -419,7 +429,7 @@ const DISCOUNT_TIERS = [
 // "oversold but intact", confirms with fundamentals, ranks by discount depth ×
 // quality, and overlays a live IDX price for the finalists. Returns serialized
 // discount cards (possibly empty — a strong day yields no discounts).
-async function screenSentimentDiscounts(date, count) {
+async function screenSentimentDiscounts(date, count, { marketOpen = false } = {}) {
   const seedCategory = {
     ...getCategory('bluechip'),
     id: 'discount-seed',
@@ -459,7 +469,7 @@ async function screenSentimentDiscounts(date, count) {
   // Enrich (chart + locked score). Fundamentals are fetched later, only for the
   // technical survivors, to keep the request budget tight.
   const enriched = (
-    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
+    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date, { marketOpen }).catch(() => null))
   ).filter(Boolean);
   funnel.enriched = enriched.length;
 
@@ -629,6 +639,7 @@ function serializeRecognizable(d) {
       rr: d.plan.rr != null ? Math.round(d.plan.rr * 10) / 10 : null,
       atr14Pct: Math.round(d.plan.atr14Pct * 1000) / 1000,
       swingHigh10: Math.round(d.plan.swingHigh10),
+      planAsOf: d.plan.planAsOf ?? 'settled',
     } : null,
     live: d.live
       ? {
@@ -656,7 +667,7 @@ function serializeRecognizable(d) {
 // on "recognizable + constructive", ranks by the composite (strongest names
 // first), and overlays a live IDX price for the finalists. `exclude` is the set
 // of tickers already surfaced by the momentum/discount tracks, to avoid repeats.
-async function screenRecognizableNames(date, count, exclude = new Set()) {
+async function screenRecognizableNames(date, count, exclude = new Set(), { marketOpen = false } = {}) {
   const seedCategory = {
     ...getCategory('bluechip'),
     id: 'recognizable-seed',
@@ -675,7 +686,7 @@ async function screenRecognizableNames(date, count, exclude = new Set()) {
   );
 
   const enriched = (
-    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
+    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date, { marketOpen }).catch(() => null))
   ).filter(Boolean);
 
   const eligible = enriched.filter(
@@ -715,6 +726,10 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
   const w = wibNow(now);
   const date = w.dateStr; // WIB trading date drives the as-of scoring
   const category = getCategory('momentum');
+  // Whether the market is live right now. Threads down into enrich() so each
+  // candidate's plan can be flagged 'live' (intraday, entry will drift) vs
+  // 'settled' (closed-market, entry is a final daily close).
+  const marketOpen = isMarketOpen(now);
 
   // IHSG breadth context — kicked off early (one cheap Yahoo chart) so the
   // volume gate below can adapt to the tape. Also reused for the discount header.
@@ -745,7 +760,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
 
   // 2. Enrich every seed name (Yahoo, free, bounded concurrency).
   const enriched = (
-    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date).catch(() => null))
+    await mapLimit(seed, ENRICH_CONCURRENCY, (t) => enrich(t, date, { marketOpen }).catch(() => null))
   ).filter(Boolean);
 
   // 3. Tradability floor (ALWAYS holds), then the relaxation LADDER.
@@ -866,7 +881,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
   // momentum overlay so its IDX calls don't interleave. IHSG context already
   // resolved above (fetched early for the breadth gate). Returns the cards plus a
   // funnel diagnostic (seed → technical → quality + strict-tier reject reasons).
-  const { cards: discounts, funnel: discountFunnel } = await screenSentimentDiscounts(date, count);
+  const { cards: discounts, funnel: discountFunnel } = await screenSentimentDiscounts(date, count, { marketOpen });
 
   // Tier D (Likuid & Populer) — the standing recognizable-name track. Run last so
   // its IDX overlay calls don't interleave with the others. Dedup against names
@@ -875,7 +890,7 @@ export async function autoScreen({ count = 5, now = new Date() } = {}) {
     ...candidates.map((c) => c.ticker),
     ...discounts.map((c) => c.ticker),
   ]);
-  const recognizable = await screenRecognizableNames(date, count, alreadyShown);
+  const recognizable = await screenRecognizableNames(date, count, alreadyShown, { marketOpen });
 
   // Human-readable discount funnel for the summary line — makes an empty section
   // self-explanatory (where did the names drop?) instead of a silent zero.

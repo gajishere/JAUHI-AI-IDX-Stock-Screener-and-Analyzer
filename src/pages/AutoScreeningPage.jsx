@@ -180,7 +180,20 @@ function PlanRows({ plan, live, rvol, lastValueTraded, scanType, kind }) {
         {lastValueTraded > 0 && stat(t('Turnover', 'Nilai'), fmtMilliar(lastValueTraded))}
         {atr14Pct > 0 && stat('ATR', `${(atr14Pct * 100).toFixed(1)}%`)}
         {posSize != null && stat(t('Size', 'Posisi'), `~${posSize}%`)}
-        <span className="ml-auto uppercase tracking-wide">{planHorizon(t, scanType)}</span>
+        <span className="ml-auto flex items-center gap-1.5 uppercase tracking-wide">
+          {plan.planAsOf === 'live' && (
+            <span
+              className="rounded-sm bg-brand/15 px-1.5 py-px font-semibold text-brand-strong"
+              title={t(
+                'Entry is an intraday print — it drifts as the session moves. Re-check before acting.',
+                'Entry adalah harga intraday — akan berubah sepanjang sesi. Periksa ulang sebelum bertindak.',
+              )}
+            >
+              {t('LIVE', 'LIVE')}
+            </span>
+          )}
+          {planHorizon(t, scanType)}
+        </span>
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
